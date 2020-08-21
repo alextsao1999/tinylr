@@ -1,4 +1,0 @@
-ToolSet: 16.0 (local)@F:\Visual Studio\2019\Community
-Options: msvc.arch=x86, version=10.0.17763.0
-
-Options:

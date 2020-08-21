@@ -1,3 +1,0 @@
-C:/Users/Administrator/Desktop/tinylalr/cmake-build-debug/CMakeFiles/tinylalr.dir
-C:/Users/Administrator/Desktop/tinylalr/cmake-build-debug/CMakeFiles/edit_cache.dir
-C:/Users/Administrator/Desktop/tinylalr/cmake-build-debug/CMakeFiles/rebuild_cache.dir
