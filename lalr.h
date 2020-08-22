@@ -149,7 +149,7 @@ namespace alex {
     };
     struct GrammarState;
     enum TransitionType {
-        TransitionGoto,
+        TransitionNone,
         TransitionShift,
         TransitionReduce
     };
@@ -170,6 +170,7 @@ namespace alex {
         }
     };
     struct GrammarState {
+        bool visited = false;
         int index = 0;
         std::set<GrammarItem> items; // Item set
         std::set<GrammarTransition> transitions;
@@ -334,7 +335,7 @@ namespace alex {
                         active->productions.back()->action = action_table[lexer.lexeme()];
                     } else {
                         auto *action = new Action(actions.size(), lexer.lexeme());
-                        actions.push_back(std::unique_ptr<Action>(action));
+                        actions.emplace_back(action);
                         action_table[lexer.lexeme()] = action;
                         active->productions.back()->action = action;
                     }
@@ -390,7 +391,9 @@ namespace alex {
             int visit_count = 0;
             while (visit_count < states.size()) {
                 states[visit_count]->index = visit_count;
-                generate_transition(states[visit_count++].get());
+                if (!states[visit_count]->visited) {
+                    generate_transition(states[visit_count++].get());
+                }
             }
             for (auto &state : states) {
                 generate_reduce(state.get());
@@ -421,6 +424,9 @@ namespace alex {
             } while (delta > 0);
         }
         void propagate(GrammarState *state, const GrammarItem &item) {
+            if (!state->visited) {
+                generate_transition(state);
+            }
             for (auto &trans : state->transitions) {
                 if (!item.dot_reduce()) {
                     auto iter = trans.state->items.find(GrammarItem(item.production, item.position + 1));
@@ -485,7 +491,7 @@ namespace alex {
             }
             GrammarState *goto_state = new GrammarState(gotos);
             goto_state->index = states.size();
-            states.push_back(std::unique_ptr<GrammarState>(goto_state));
+            states.emplace_back(goto_state);
             return goto_state;
         }
         GrammarState *generate_start(Nonterminal *symbol) {
@@ -500,6 +506,7 @@ namespace alex {
             return state;
         }
         void generate_transition(GrammarState *state) {
+            state->visited = true;
             for (auto &symbol : symbols) {
                 auto *goto_state = get_goto_state(state->items, symbol.get());
                 if (goto_state) {
