@@ -210,7 +210,7 @@ namespace alex {
         LALRGrammarParser(const char *grammer) {
             lexer.set_whitespace("([ \r\t\n]+)|(/\\*.*\\*/)|(//.*\n)");
             lexer.add_pattern("\"(\\\\.|.)*\"|'(\\\\.|.)*'", (SymbolType) Token_String);
-            lexer.add_pattern("([a-zA-Z_]|([\\x81-\\xfe][\\x40-\\xfe]))([a-zA-Z0-9_]|[\\x81-\\xfe][\\x40-\\xfe])*", (SymbolType) Token_Identifier);
+            lexer.add_pattern("[a-zA-Z_][a-zA-Z0-9_]*", (SymbolType) Token_Identifier);
             lexer.add_pattern("\\|", (SymbolType) Token_Bar);
             lexer.add_pattern("\\->", (SymbolType) Token_Arrow);
             lexer.add_pattern("%none", (SymbolType) Token_None);

@@ -43,11 +43,12 @@ namespace alex {
     public:
         RegexNodeDecl();
         RegexConcat() = default;
-
+        virtual ~RegexConcat() = default;
         RegexConcat(const std::shared_ptr<RegexNode> &lhs, const std::shared_ptr<RegexNode> &rhs) {
             add(lhs);
             add(rhs);
         }
+
         std::vector <std::shared_ptr<RegexNode>> nodes;
         void add(const std::shared_ptr<RegexNode>& node) {
             nodes.push_back(node);
@@ -72,6 +73,7 @@ namespace alex {
     public:
         RegexNodeDecl();
         RegexBracket() = default;
+        virtual ~RegexBracket() = default;
         std::vector <std::shared_ptr<RegexNode>> nodes;
         void add(const std::shared_ptr<RegexNode>& node) {
             nodes.push_back(node);
@@ -88,6 +90,7 @@ namespace alex {
     public:
         RegexNodeDecl();
         RegexOr() = default;
+        virtual ~RegexOr() = default;
         std::shared_ptr<RegexNode> lhs;
         std::shared_ptr<RegexNode> rhs;
         RegexOr(std::shared_ptr <RegexNode> lhs, std::shared_ptr <RegexNode> rhs) : lhs(std::move(lhs)), rhs(std::move(rhs)) {}
@@ -103,6 +106,7 @@ namespace alex {
         RegexNodeDecl();
         RegexRange(RegexChar begin, RegexChar end) : begin(begin), end(end) {}
         RegexRange(RegexChar chr) : begin(chr), end(chr)  {}
+        virtual ~RegexRange() = default;
         RegexChar begin;
         RegexChar end;
         SymbolType symbol = SymbolNull;
@@ -126,6 +130,7 @@ namespace alex {
         RegexNodeDecl();
         std::shared_ptr <RegexNode> node;
         RegexStar(std::shared_ptr <RegexNode> node) : node(std::move(node)) {}
+        virtual ~RegexStar() = default;
         void print() override {
             node->print();
             std::cout << "*";
@@ -137,6 +142,7 @@ namespace alex {
         RegexNodeDecl();
         std::shared_ptr <RegexNode> node;
         RegexPlus(std::shared_ptr <RegexNode> node) : node(std::move(node)) {}
+        virtual ~RegexPlus() = default;
         void print() override {
             node->print();
             std::cout << "+";
@@ -147,6 +153,7 @@ namespace alex {
         RegexNodeDecl();
         std::shared_ptr <RegexNode> node; // 问号
         RegexQuestion(std::shared_ptr <RegexNode> node) : node(std::move(node)) {}
+        virtual ~RegexQuestion() = default;
         void print() override {
             node->print();
             std::cout << "?";
@@ -175,6 +182,7 @@ namespace alex {
         SymbolType symbol = SymbolNull;
         std::vector<RegexTransition> transitions;
         std::vector<RegexRange *> gotos; // list index of the leaf
+        RegexState() = default;
         inline const RegexTransition *find_trans(const uint8_t chr) const {
             const RegexTransition *dot = nullptr;
             for (auto &item : transitions) {
@@ -192,6 +200,7 @@ namespace alex {
     public:
         std::vector<RegexRange *> firstpos; // all first pos
         std::vector<std::unique_ptr<RegexState>> states;
+        std::vector<std::shared_ptr<RegexNode>> nodes;
         RegexGenerator() = default;
         void feed(std::shared_ptr<RegexNode> node, SymbolType symbol) {
             node->accept(this);
@@ -199,6 +208,7 @@ namespace alex {
             for (auto &item : node->lastpos) {
                 item->symbol = symbol;
             }
+            nodes.push_back(node);
         }
         std::vector<std::unique_ptr<RegexState>> generate() {
             get_goto_state(firstpos);
@@ -236,16 +246,16 @@ namespace alex {
             }
             return false;
         }
-        RegexState *get_goto_state(std::vector<RegexRange *> &go_to, SymbolType symbol = SymbolNull) {
+        RegexState *get_goto_state(std::vector<RegexRange *> &gotos, SymbolType symbol = SymbolNull) {
             for (int i = 0; i < states.size(); ++i) {
-                if (is_same(states[i]->gotos, go_to) && symbol == states[i]->symbol) {
+                if (is_same(states[i]->gotos, gotos) && symbol == states[i]->symbol) {
                     return states[i].get();
                 }
             }
             auto *state = new RegexState();
             state->index = states.size();
             state->symbol = symbol;
-            state->gotos = go_to;
+            state->gotos = gotos;
             states.emplace_back(state);
             return state;
         }
@@ -311,7 +321,7 @@ namespace alex {
                 item->accept(this);
             }
             for (auto &item : node->nodes) {
-                node->followpos.insert(node->followpos.end(), item->firstpos.begin(), item->firstpos.end());
+                node->firstpos.insert(node->firstpos.end(), item->firstpos.begin(), item->firstpos.end());
                 if (!item->nullable()) {
                     break;
                 }

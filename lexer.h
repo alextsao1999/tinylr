@@ -27,24 +27,24 @@ namespace alex {
         iter_t token_line_start = 0;
         Lexer() = default;
         void set_whitespace(viewer_t pattern) {
-            RegexParser parser(&*pattern.begin(), &*pattern.end());
+            RegexParser parser(pattern.data());
             RegexGenerator space_generator;
             space_generator.feed(parser.parse_concat(), (SymbolType) 1);
             whitespace = std::move(space_generator.generate());
         }
         void add_pattern(viewer_t pattern, SymbolType symbol) {
-            RegexParser parser(&*pattern.begin(), &*pattern.end());
+            RegexParser parser(pattern.data());
             generator.feed(parser.parse_concat(), symbol);
         }
         void add_literal(viewer_t pattern, SymbolType symbol) {
-            RegexParser parser(&*pattern.begin(), &*pattern.end());
+            RegexParser parser(pattern.data());
             generator.feed(parser.parse_literal(), symbol);
         }
         void generate_states() {
             state_machine = std::move(generator.generate());
         }
         void reset(viewer_t str) {
-            reset(&*str.begin(), &*str.end());
+            reset(str.data(), str.data() + str.length());
         }
         void reset(iter_t begin, iter_t end) {
             this->current = this->first = this->token_line_start = begin;
