@@ -43,7 +43,8 @@ namespace alex {
     struct Action {
         int index;
         viewer_t identifier;
-        Action(int index, const viewer_t &identifier) : index(index), identifier(identifier) {}
+        std::map<std::string, std::string> fields;
+        Action() = default;
     };
     struct Symbol {
         int index = 0;
@@ -109,7 +110,12 @@ namespace alex {
             std::cout << "(" << pattern << ")";
         }
         Terminal *terminal() override { return this; }
-        std::string to_str() override { return std::string(pattern); }
+        std::string to_str() override {
+            auto result = pattern;
+            result.remove_prefix(1);
+            result.remove_suffix(1);
+            return std::string(result);
+        }
     };
     struct GrammarItem {
         Production *production;
@@ -156,7 +162,7 @@ namespace alex {
     struct GrammarTransition {
         GrammarState *state;
         Symbol *symbol;
-        //int index = -1;
+        mutable int index = -1;
         mutable TransitionType type = TransitionShift;
         mutable Symbol *reduce_symbol = nullptr;
         mutable int reduce_length = 0;
@@ -170,8 +176,8 @@ namespace alex {
         }
     };
     struct GrammarState {
-        bool visited = false;
         int index = 0;
+        bool visited = false;
         std::set<GrammarItem> items; // Item set
         std::set<GrammarTransition> transitions;
         GrammarState() = default;
@@ -188,7 +194,6 @@ namespace alex {
         std::vector<std::unique_ptr<Action>> actions;
         std::map<viewer_t, Nonterminal *> nonterminal_table;
         std::map<viewer_t, Terminal *> terminal_table;
-        std::map<viewer_t, Action *> action_table;
         Nonterminal *start = nullptr;
         Nonterminal *end = nullptr;
         Nonterminal *active = nullptr;
@@ -198,39 +203,48 @@ namespace alex {
             Token_Null,
             Token_String,
             Token_Identifier,
-            Token_Bar,
+            Token_Pipe,
             Token_Arrow,
             Token_None,
             Token_Left,
             Token_Right,
-            Token_LeftBraket,
-            Token_RightBraket,
+            Token_LeftBrace,
+            Token_RightBrace,
+            Token_Comma,
+            Token_Colon,
+            Token_Number,
+            Token_Desc,
             Token_Start,
-            Token_End,
+            Token_Semicolon,
         };
         LALRGrammarParser(const char *grammer) {
             lexer.set_whitespace("([ \r\t\n]+)|(/\\*.*\\*/)|(//.*\n)");
             lexer.add_pattern("\"(\\\\.|.)*\"|'(\\\\.|.)*'", (SymbolType) Token_String);
             lexer.add_pattern("[a-zA-Z_][a-zA-Z0-9_]*", (SymbolType) Token_Identifier);
-            lexer.add_pattern("\\|", (SymbolType) Token_Bar);
+            lexer.add_pattern("\\|", (SymbolType) Token_Pipe);
             lexer.add_pattern("\\->", (SymbolType) Token_Arrow);
             lexer.add_pattern("%none", (SymbolType) Token_None);
             lexer.add_pattern("%left", (SymbolType) Token_Left);
             lexer.add_pattern("%right", (SymbolType) Token_Right);
             lexer.add_pattern("%start", (SymbolType) Token_Start);
-            lexer.add_pattern("\\[", (SymbolType) Token_LeftBraket);
-            lexer.add_pattern("\\]", (SymbolType) Token_RightBraket);
-            lexer.add_pattern(";", (SymbolType) Token_End);
+            lexer.add_pattern("\\{", (SymbolType) Token_LeftBrace);
+            lexer.add_pattern("\\}", (SymbolType) Token_RightBrace);
+            lexer.add_pattern(",", (SymbolType) Token_Comma);
+            lexer.add_pattern("[0-9]+(\\.[0-9]+)?", (SymbolType) Token_Number);
+            lexer.add_pattern("($|@)+[0-9]+", (SymbolType) Token_Desc);
+            lexer.add_pattern(":", (SymbolType) Token_Colon);
+            lexer.add_pattern(";", (SymbolType) Token_Semicolon);
             lexer.generate_states();
 
             start = new Nonterminal("@start");
+            start->index = 0;
             symbols.push_back(std::unique_ptr<Symbol>(start));
 
             end = new Nonterminal("@end");
+            end->index = 0;
             symbols.push_back(std::unique_ptr<Symbol>(end));
 
-            error = new Nonterminal("error");
-            symbols.push_back(std::unique_ptr<Symbol>(error));
+            error = get_nonterminal("error");
 
             lexer.reset(grammer);
             parse_rules();
@@ -243,9 +257,9 @@ namespace alex {
             return false;
         }
         void expect(const char *str) {
-            std::cout << "expect:" << str << " line:"
-                      << lexer.line() << " column:" << lexer.column() << std::endl;
-            std::cout << ">>> " << lexer.lexeme() << std::endl;
+            std::cout << "expect: " << str << " line:"
+                      << lexer.line() + 1 << " column:" << lexer.column() + 1 << std::endl;
+            std::cout << ">>> " << std::string(lexer.lexeme().data(), 25) << std::endl;
             std::cout << "    " << "^^^" << std::endl;
         }
         Nonterminal *get_nonterminal(viewer_t name) {
@@ -253,7 +267,7 @@ namespace alex {
                 return nonterminal_table[name];
             }
             auto *nt = new Nonterminal(name);
-            nt->index = symbols.size() + 1;
+            nt->index = symbols.size();
             nt->line = lexer.line();
             nt->column = lexer.column();
             symbols.push_back(std::unique_ptr<Symbol>(nt));
@@ -319,30 +333,21 @@ namespace alex {
                     start->push_start(symbol);
                 } while (true);
             } else {
+                expect("identifier, associativity or start");
                 return false;
             }
             return true;
         }
         bool parse_production() {
             do {
-                if (lexer.symbol() == (SymbolType) Token_Bar) {
+                if (lexer.symbol() == (SymbolType) Token_Pipe) {
                     lexer.advance();
                     active->push_production(new Production(active));
                     return true;
-                } else if (lexer.symbol() == (SymbolType) Token_LeftBraket) {
-                    lexer.advance();
-                    if (action_table.count(lexer.lexeme())) {
-                        active->productions.back()->action = action_table[lexer.lexeme()];
-                    } else {
-                        auto *action = new Action(actions.size(), lexer.lexeme());
-                        actions.emplace_back(action);
-                        action_table[lexer.lexeme()] = action;
-                        active->productions.back()->action = action;
-                    }
-                    lexer.advance();
-                    match(Token_RightBraket);
+                } else if (lexer.symbol() == (SymbolType) Token_LeftBrace) {
+                    active->productions.back()->action = parse_action();
                     continue;
-                } else if (lexer.symbol() == (SymbolType) Token_End) {
+                } else if (lexer.symbol() == (SymbolType) Token_Semicolon) {
                     return false;
                 }
                 Symbol *symbol = parse_symbol();
@@ -352,6 +357,26 @@ namespace alex {
                 }
                 active->push_symbol(symbol);
             } while (true);
+        }
+        Action *parse_action() {
+            Action *action = new Action();
+            actions.emplace_back(action);
+            do {
+                lexer.advance();
+                auto field = lexer.lexeme();
+                lexer.advance();
+                if (lexer.symbol() != (SymbolType) Token_Colon) {
+                    expect(":");
+                }
+                lexer.advance();
+                auto value = lexer.lexeme();
+                action->fields[std::string(field)] = value;
+                lexer.advance();
+            } while (lexer.symbol() == (SymbolType) Token_Comma);
+            if (!match(Token_RightBrace)) {
+                expect("}");
+            }
+            return action;
         }
         Symbol *parse_symbol() {
             Symbol *symbol = nullptr;
@@ -392,12 +417,14 @@ namespace alex {
             while (visit_count < states.size()) {
                 states[visit_count]->index = visit_count;
                 if (!states[visit_count]->visited) {
-                    generate_transition(states[visit_count++].get());
+                    generate_transition(states[visit_count].get());
                 }
+                visit_count++;
             }
             for (auto &state : states) {
                 generate_reduce(state.get());
             }
+            generate_index();
         }
         inline std::vector<std::unique_ptr<Symbol>> &get_symbols() { return symbols; }
         inline std::vector<std::unique_ptr<Action>> &get_actions() { return actions; }
@@ -539,6 +566,19 @@ namespace alex {
                             }
                         }
                     }
+                }
+            }
+        }
+        void generate_index() {
+            int index = 0;
+            for (auto &action : actions) {
+                action->index = index;
+                index += action->fields.size();
+            }
+            index = 0;
+            for (auto &state : states) {
+                for (auto &trans : state->transitions) {
+                    trans.index = index++;
                 }
             }
         }
