@@ -48,8 +48,7 @@ namespace alex {
             add(lhs);
             add(rhs);
         }
-
-        std::vector <std::shared_ptr<RegexNode>> nodes;
+        std::vector<std::shared_ptr<RegexNode>> nodes;
         void add(const std::shared_ptr<RegexNode>& node) {
             nodes.push_back(node);
         }
@@ -122,7 +121,6 @@ namespace alex {
             } else {
                 std::cout << (char) begin << "-" << (char) end;
             }
-            //std::cout << " #" << index << followpos << " ";
         }
     };
     class RegexStar : public RegexNode {
@@ -151,7 +149,7 @@ namespace alex {
     class RegexQuestion : public RegexNode {
     public:
         RegexNodeDecl();
-        std::shared_ptr <RegexNode> node; // 问号
+        std::shared_ptr <RegexNode> node;
         RegexQuestion(std::shared_ptr <RegexNode> node) : node(std::move(node)) {}
         virtual ~RegexQuestion() = default;
         void print() override {
@@ -210,13 +208,13 @@ namespace alex {
             }
             nodes.push_back(node);
         }
-        std::vector<std::unique_ptr<RegexState>> generate() {
+        std::vector<std::unique_ptr<RegexState>> &generate() {
             get_goto_state(firstpos);
             int visit_count = 0;
             while (visit_count < states.size()) {
                 generate_transition(states[visit_count++].get());
             }
-            return std::move(states);
+            return (states);
         }
     private:
         bool contains(std::vector<RegexRange *> &vec, RegexRange *node) {

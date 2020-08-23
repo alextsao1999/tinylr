@@ -68,6 +68,48 @@ std::string parser_emit_c(LALRGenerator &generator) {
            "}\n";
     return out.str();
 }
+std::string lexer_emit_c(LALRGenerator &generator) {
+    std::stringstream out;
+    Lexer lexer;
+    for (auto &symbol : generator.get_symbols()) {
+        if (!symbol->is_nonterminal()) {
+            auto pattern = symbol->terminal()->pattern;
+            bool literal = pattern.front() == '\'';
+            pattern.remove_prefix(1);
+            pattern.remove_suffix(1);
+            if (literal) {
+                lexer.add_literal(pattern, (SymbolType) symbol->index);
+            } else {
+                lexer.add_pattern(pattern, (SymbolType) symbol->index);
+            }
+        }
+    }
+    for (auto &node : lexer.generator.nodes) {
+        node->print();
+        std::cout << std::endl << std::endl << std::endl;
+    }
+    lexer.generate_states();
+    out << "void lexer_advance(const char *first, const char *last) {\n"
+           "    int state = 0, symbol = 0;\n"
+           "    do {\n"
+        << "        switch (state) {\n";
+    for (auto &state : lexer.state_machine) {
+        indent(out, 3) << "case " << state->index << ":\n";
+        for (auto &trans : state->transitions) {
+            indent(out, 4) << "if (*first >= " << trans.begin << " && *first <= " << trans.end << ") {\n";
+            indent(out, 5) << "GOTO(" << trans.state->index << ");\n";
+            indent(out, 4) << "}\n";
+        }
+        if (state->symbol != SymbolNull) {
+            indent(out, 4) << "SYMBOL(" << (int) state->symbol << ");\n";
+        }
+        indent(out, 4) << "break;\n";
+    }
+    out << "        }\n";
+    out << "    } while(true);\n";
+    out << "}\n";
+    return out.str();
+}
 std::string parser_emit_lexer(LALRGenerator &generator) {
     std::stringstream out;
     Lexer lexer;
@@ -82,7 +124,6 @@ std::string parser_emit_lexer(LALRGenerator &generator) {
             } else {
                 lexer.add_pattern(pattern, (SymbolType) symbol->index);
             }
-            std::cout << "pattern" << pattern << std::endl;
         }
     }
     lexer.generate_states();
@@ -105,8 +146,8 @@ std::string parser_emit_lexer(LALRGenerator &generator) {
     out << "LexerState LexerStates[] = {\n";
     for (auto &state : lexer.state_machine) {
         out << "    {"
-            << "LexerTransitions[" << index << "], "
-            << "LexerTransitions[" << (index + state->transitions.size()) << "], ";
+            << "&LexerTransitions[" << index << "], "
+            << "&LexerTransitions[" << (index + state->transitions.size()) << "], ";
         out << (int) state->symbol;
         out << "}, \n";
         index += state->transitions.size();
@@ -189,5 +230,6 @@ int main() {
     LALRGenerator gen(lalr);
     gen.generate();
     std::cout << parser_emit_states(gen);
+
     return 0;
 }
