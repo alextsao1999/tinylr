@@ -43,7 +43,7 @@ namespace alex {
     struct Action {
         int index;
         viewer_t identifier;
-        std::map<std::string, std::string> fields;
+        std::map<viewer_t, viewer_t> fields;
         Action() = default;
     };
     struct Symbol {
@@ -105,6 +105,7 @@ namespace alex {
         viewer_t pattern;
         Terminal(const viewer_t &pattern) : pattern(pattern) {}
         virtual ~Terminal() = default;
+        bool is_nonterminal() const override { return false; }
         int accept(SymbolVisitor *visitor) override { return visitor->visit(this); }
         void dump() const override {
             std::cout << "(" << pattern << ")";
@@ -198,6 +199,7 @@ namespace alex {
         Nonterminal *end = nullptr;
         Nonterminal *active = nullptr;
         Nonterminal *error = nullptr;
+        Symbol *whitespace = nullptr;
         int precedence = 0;
         enum TokenType {
             Token_Null,
@@ -215,6 +217,7 @@ namespace alex {
             Token_Number,
             Token_Desc,
             Token_Start,
+            Token_WhiteSpace,
             Token_Semicolon,
         };
         LALRGrammarParser(const char *grammer) {
@@ -227,6 +230,7 @@ namespace alex {
             lexer.add_pattern("%left", (SymbolType) Token_Left);
             lexer.add_pattern("%right", (SymbolType) Token_Right);
             lexer.add_pattern("%start", (SymbolType) Token_Start);
+            lexer.add_pattern("%whitespace", (SymbolType) Token_WhiteSpace);
             lexer.add_pattern("\\{", (SymbolType) Token_LeftBrace);
             lexer.add_pattern("\\}", (SymbolType) Token_RightBrace);
             lexer.add_pattern(",", (SymbolType) Token_Comma);
@@ -280,7 +284,7 @@ namespace alex {
                 return terminal_table[name];
             } else {
                 auto *nt = new Terminal(name);
-                nt->index = symbols.size() + 1;
+                nt->index = symbols.size();
                 nt->line = lexer.line();
                 nt->column = lexer.column();
                 symbols.push_back(std::unique_ptr<Symbol>(nt));
@@ -332,6 +336,18 @@ namespace alex {
                     }
                     start->push_start(symbol);
                 } while (true);
+            } else if (lexer.symbol() == (SymbolType) Token_WhiteSpace) {
+                lexer.advance();
+                Symbol *symbol = parse_symbol();
+                if (!symbol) {
+                    expect("symbol");
+                    return false;
+                }
+                if (symbol->is_nonterminal()) {
+                    expect("terminal");
+                    return false;
+                }
+                whitespace = symbol;
             } else {
                 expect("identifier, associativity or start");
                 return false;
@@ -369,8 +385,7 @@ namespace alex {
                     expect(":");
                 }
                 lexer.advance();
-                auto value = lexer.lexeme();
-                action->fields[std::string(field)] = value;
+                action->fields[field] = lexer.lexeme();
                 lexer.advance();
             } while (lexer.symbol() == (SymbolType) Token_Comma);
             if (!match(Token_RightBrace)) {
@@ -399,9 +414,14 @@ namespace alex {
         Nonterminal *start;
         Nonterminal *error;
         Nonterminal *end;
+        Symbol *whitespace;
         LALRGenerator(LALRGrammarParser &parser) : symbols(std::move(parser.symbols)),
-                                                   actions(std::move(parser.actions)), start(parser.start),
-                                                   error(parser.error), end(parser.end) {
+                                                   actions(std::move(parser.actions)) {
+            start = parser.start;
+            error = parser.error;
+            end = parser.end;
+            whitespace = parser.whitespace;
+
             parser.start->follow.insert(end);
             int delta;
             do {
