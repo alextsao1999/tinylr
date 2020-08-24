@@ -360,8 +360,8 @@ namespace alex {
         bool parse_production() {
             do {
                 if (lexer.symbol() == (SymbolType) Token_Pipe) {
-                    lexer.advance();
                     active->push_production(new Production(active));
+                    lexer.advance();
                     return true;
                 } else if (lexer.symbol() == (SymbolType) Token_LeftBrace ||
                            lexer.symbol() == (SymbolType) Token_Desc) {

@@ -65,13 +65,17 @@ struct ParserNode {
     int column = 0;
     std::basic_string<char_t, char_traits> lexeme;
     Value value;
+    std::basic_string<char> dump;
+
     ParserNode(ParserState *state, int symbol = 0) : state(state), symbol(symbol) {}
     ParserNode(ParserState *state, int symbol, int line, int column,
                const std::basic_string<char_t, char_traits> &lexeme, const Value &value) :
             state(state), symbol(symbol),
             line(line), column(column),
             lexeme(lexeme),
-            value(std::move(value)) {}
+            value(std::move(value)) {
+        dump = value.dump();
+    }
 };
 template <class iter_t = const char *, class char_t = typename std::iterator_traits<iter_t>::value_type, class char_traits = std::char_traits<char_t>>
 class ParserLexer {
@@ -142,7 +146,7 @@ public:
     void dump() {
         while (good()) {
             advance();
-            std::cout << lexeme_ << ", " << token_symbol
+            std::cout << lexeme_ << "  " << token_symbol
                       << "[" << line() << ", " << column() << "]" << std::endl;
 
             if (token_symbol == 0) {
@@ -158,6 +162,7 @@ class Parser {
     using Node = ParserNode<char_t, char_traits>;
     ParserState *parser_state = &ParserStates[0];
     Lexer parser_lexer;
+    bool position = false;
     ParserTransition *find_trans(ParserState *state, int symbol) {
         for (auto &trans : *state) {
             if (trans.symbol == symbol) {
@@ -169,6 +174,9 @@ class Parser {
 public:
     std::vector<Node> stack;
     Parser() = default;
+    void set_position(bool sp) {
+        position = sp;
+    }
     void reset(iter_t first, iter_t last) {
         parser_lexer.reset(first, last);
     }
@@ -182,6 +190,7 @@ public:
                 break;
             }
             if (trans->type == 1) { //Shift
+                //debug_shift(trans);
                 stack.emplace_back(trans->state, parser_lexer.symbol(), parser_lexer.line(), parser_lexer.column(),
                                    parser_lexer.lexeme(), Value());
                 parser_lexer.advance();
@@ -193,52 +202,83 @@ public:
             }
         } while (true);
     }
+    Value &value() { return stack[0].value; }
     inline void reduce(ParserTransition *trans) {
+        auto stack_start = (stack.size() - trans->reduce_length);
         Value reduce_value;
-        auto stack_start = (stack.end() - trans->reduce_length);
-        if (trans->reduce_symbol == 0) {
-            reduce_value = std::move(std::move((stack_start)->value));
+        int line = 0;
+        int column = 0;
+        if (stack_start != stack.size()) {
+            line = stack[stack_start].line;
+            column = stack[stack_start].column;
+            reduce_value = handle(trans->actions, trans->action_count, &stack[stack_start]);
+            if (position && reduce_value.is_object()) {
+                reduce_value["position"] = {{"line",   line},
+                                            {"column", column}};
+            }
+            stack.erase(stack.begin() + stack_start, stack.end());
+            if (trans->reduce_symbol == 0) {
+                stack.back().value = std::move(reduce_value);
+                return;
+            }
         }
-        for (int i = 0; i < trans->action_count; ++i) {
-            auto &action = trans->actions[i];
+        auto *new_trans = find_trans(stack.back().state, trans->reduce_symbol);
+        stack.emplace_back(new_trans->state,
+                           trans->reduce_symbol,
+                           line, column,
+                           std::string(ParserSymbols[trans->reduce_symbol].text),
+                           reduce_value);
+
+    }
+    inline void debug_shift(ParserTransition *trans) {
+        std::cout << "shift: " << ParserSymbols[parser_lexer.symbol()].text << " "
+                  << parser_lexer.lexeme()
+                  << std::endl;
+
+    }
+    inline void debug_reduce(ParserTransition *trans, int start) {
+        std::cout << "reduce: "
+                  << start << " "
+                  << ParserSymbols[trans->reduce_symbol].text << " -> ";
+        for (int i = start; i < start + trans->reduce_length; ++i) {
+            std::cout << "[" << stack[i].lexeme << "] " << stack[i].value << " | ";
+        }
+        std::cout << std::endl << std::endl;
+    }
+    Value handle(ReduceAction *actions, int action_count, Node *nodes) {
+        if (action_count == 0) {
+            return std::move(nodes->value);
+        }
+        Value value;
+        for (int i = 0; i < action_count; ++i) {
+            auto &action = actions[i];
             if (action.type == 0) {
-                reduce_value = std::move((stack_start + action.value)->value);
+                value = std::move((nodes + action.value)->value);
             }
             if (action.type == 1) {
-                auto &field = reduce_value[std::string(action.field)];
-                if (field.empty()) {
-                    field = std::move((stack_start + action.value)->value);
-                } else if (field.is_array()) {
-                    field.emplace_back(std::move((stack_start + action.value)->value));
-                } else {
-                    field = Value::array({std::move(field), std::move((stack_start + action.value)->value)});
-                }
+                value = (nodes + action.value)->lexeme.c_str();
             }
             if (action.type == 2) {
-                reduce_value[std::string(action.field)] = (stack_start + action.value)->lexeme.c_str();
+                auto &field = value[std::string(action.field)];
+                if (field.empty()) {
+                    field = std::move((nodes + action.value)->value);
+                } else if (field.is_array()) {
+                    field.emplace_back(std::move((nodes + action.value)->value));
+                } else {
+                    field = Value::array({std::move(field), std::move((nodes + action.value)->value)});
+                }
             }
             if (action.type == 3) {
-                reduce_value[std::string(action.field)] = action.desc;
+                value[std::string(action.field)] = (nodes + action.value)->lexeme.c_str();
             }
             if (action.type == 4) {
-                reduce_value[std::string(action.field)] = action.value;
+                value[std::string(action.field)] = action.desc;
+            }
+            if (action.type == 5) {
+                value[std::string(action.field)] = action.value;
             }
         }
-        int line = (stack_start)->line;
-        int column = (stack_start)->column;
-        reduce_value["position"] = {{"line",   line},
-                                    {"column", column}};
-        stack.erase(stack_start, stack.end());
-        if (trans->reduce_symbol == 0) {
-            stack.back().value = std::move(reduce_value);
-        } else {
-            auto *new_trans = find_trans(stack.back().state, trans->reduce_symbol);
-            stack.emplace_back(new_trans->state,
-                               trans->reduce_symbol,
-                               line, column,
-                               std::string(ParserSymbols[trans->reduce_symbol].text),
-                               reduce_value);
-        }
+        return std::move(value);
     }
 };
 
