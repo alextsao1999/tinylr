@@ -42,9 +42,12 @@ namespace alex {
     };
     struct Action {
         int index;
-        viewer_t identifier;
+        viewer_t base;
         std::map<viewer_t, viewer_t> fields;
         Action() = default;
+        inline size_t size() {
+            return fields.size() + (base.empty() ? 0 : 1);
+        }
     };
     struct Symbol {
         int index = 0;
@@ -360,7 +363,8 @@ namespace alex {
                     lexer.advance();
                     active->push_production(new Production(active));
                     return true;
-                } else if (lexer.symbol() == (SymbolType) Token_LeftBrace) {
+                } else if (lexer.symbol() == (SymbolType) Token_LeftBrace ||
+                           lexer.symbol() == (SymbolType) Token_Desc) {
                     active->productions.back()->action = parse_action();
                     continue;
                 } else if (lexer.symbol() == (SymbolType) Token_Semicolon) {
@@ -377,6 +381,13 @@ namespace alex {
         Action *parse_action() {
             Action *action = new Action();
             actions.emplace_back(action);
+            if (lexer.symbol() == (SymbolType) Token_Desc) {
+                action->base = lexer.lexeme();
+                lexer.advance();
+                if (lexer.symbol() != (SymbolType) Token_LeftBrace) {
+                    return action;
+                }
+            }
             do {
                 lexer.advance();
                 auto field = lexer.lexeme();
@@ -593,7 +604,7 @@ namespace alex {
             int index = 0;
             for (auto &action : actions) {
                 action->index = index;
-                index += action->fields.size();
+                index += action->size();
             }
             index = 0;
             for (auto &state : states) {

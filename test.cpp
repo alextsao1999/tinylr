@@ -86,7 +86,7 @@ std::string parser_emit_c(LALRGenerator &generator) {
             if (trans.type == TransitionReduce) {
                 indent(out, 4) << "if (SYMBOL_NEXT() == " << trans.symbol->index << ") {\n";
                 if (trans.reduce_action) {
-                    indent(out, 5) << "ACTION(" << trans.reduce_action->identifier << ", " << trans.reduce_length
+                    indent(out, 5) << "ACTION(" << trans.reduce_action->base << ", " << trans.reduce_length
                                    << ");\n";
                 }
                 indent(out, 5) << "REDUCE(" << trans.reduce_symbol->index
@@ -235,22 +235,26 @@ std::string parser_emit_action(LALRGenerator &generator) {
     std::stringstream out;
     out << "ReduceAction ParserActions[] = {\n";
     for (auto &action : generator.get_actions()) {
+        if (!action->base.empty()) {
+            out << "    {\"\", \"" << action->base << "\", 0, " << (std::atoi(action->base.data() + 1) - 1);
+            out << "}, \n";
+        }
         for (auto[key, value] : action->fields) {
             out << "    {\"" << key << "\", ";
             if (value.front() == '$') {
                 out << "\"" << value << "\", ";
-                out << "0, " << (std::atoi(value.data() + 1) - 1);
+                out << "1, " << (std::atoi(value.data() + 1) - 1);
             } else if (value.front() == '@') {
                 out << "\"" << value << "\", ";
-                out << "1, " << (std::atoi(value.data() + 1) - 1);
+                out << "2, " << (std::atoi(value.data() + 1) - 1);
             } else if (value.front() == '\'') {
                 value.remove_prefix(1);
                 value.remove_suffix(1);
                 out << "\"" << value << "\", ";
-                out << "2, 0";
+                out << "3, 0";
             } else {
                 out << "\"" << value << "\", ";
-                out << "3, " << std::atoi(value.data());
+                out << "4, " << std::atoi(value.data());
             }
             out << "}, \n";
         }
@@ -292,7 +296,7 @@ std::string parser_emit_states(LALRGenerator &generator) {
                 << trans.reduce_length << ", ";
             if (trans.reduce_action) {
                 out << "&ParserActions[" << trans.reduce_action->index << "], "
-                    << trans.reduce_action->fields.size();
+                    << trans.reduce_action->size();
             } else {
                 out << "nullptr, 0";
             }
@@ -312,18 +316,23 @@ std::string parser_emit_states(LALRGenerator &generator) {
     out << "};\n";
     return out.str();
 }
-int main() {
+void generate() {
     LALRGrammarParser lalr(
             "%left '+' '-' '*' '/';"
             "%start expr;"
             "%whitespace \"[ \n\r\t]+\";"
+            "%none '(';"
             "expr -> expr '+' expr {left:$1, right:$3, op:'+'}"
             "       | expr '-' expr {left:$1, right:$3, op:'-'}"
             "       | expr '*' expr {left:$1, right:$3, op:'*'}"
             "       | expr '/' expr {left:$1, right:$3, op:'/'}"
-            "       | '(' expr ')' {compound:$2}"
+            "       | '(' expr ')' $2"
             ";"
-            "expr -> \"[0-9]+\" {type:'number', number:@1};"
+            "expr -> number $1 | invoke $1;"
+            "invoke -> identifier '(' arg_list ')' {type:'invoke', name:$1, args:$3} ;"
+            "arg_list -> arg_list ',' expr $1{value:$3} | expr {type:'arg_list', value:$1} ;"
+            "identifier -> \"[a-zA-Z][a-zA-Z0-9]*\" {type:'identifier', value:@1};"
+            "number -> \"[0-9]+\" {type:'number', value:@1};"
     );
     LALRGenerator gen(lalr);
     gen.generate();
@@ -331,13 +340,17 @@ int main() {
     fs.open("parser.cpp", std::ios::trunc | std::ios::out);
     fs << parser_emit_states(gen);
     fs.close();
+}
+int main() {
+    //generate();
 
-    const char *string = "1234 + (342 * 2)*2+3 + 22";
+    const char *string = "1234 + (342 * 2)*2+3 + 22+ add(1,sub(4, 5, 6),3)+10";
     Parser<> parser;
     parser.reset(string, string + strlen(string));
     parser.parse();
     for (auto &value : parser.stack) {
         std::cout << value.value;
     }
+
     return 0;
 }

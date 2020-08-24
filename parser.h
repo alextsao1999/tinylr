@@ -169,7 +169,6 @@ class Parser {
 public:
     std::vector<Node> stack;
     Parser() = default;
-
     void reset(iter_t first, iter_t last) {
         parser_lexer.reset(first, last);
     }
@@ -203,20 +202,32 @@ public:
         for (int i = 0; i < trans->action_count; ++i) {
             auto &action = trans->actions[i];
             if (action.type == 0) {
-                reduce_value[std::string(action.field)] = std::move((stack_start + action.value)->value);
+                reduce_value = std::move((stack_start + action.value)->value);
             }
             if (action.type == 1) {
-                reduce_value[std::string(action.field)] = std::atoi((stack_start + action.value)->lexeme.c_str());
+                auto &field = reduce_value[std::string(action.field)];
+                if (field.empty()) {
+                    field = std::move((stack_start + action.value)->value);
+                } else if (field.is_array()) {
+                    field.emplace_back(std::move((stack_start + action.value)->value));
+                } else {
+                    field = Value::array({std::move(field), std::move((stack_start + action.value)->value)});
+                }
             }
             if (action.type == 2) {
-                reduce_value[std::string(action.field)] = std::string(action.desc);
+                reduce_value[std::string(action.field)] = (stack_start + action.value)->lexeme.c_str();
             }
             if (action.type == 3) {
+                reduce_value[std::string(action.field)] = action.desc;
+            }
+            if (action.type == 4) {
                 reduce_value[std::string(action.field)] = action.value;
             }
         }
-        int line = stack_start->line;
-        int column = stack_start->column;
+        int line = (stack_start)->line;
+        int column = (stack_start)->column;
+        reduce_value["position"] = {{"line",   line},
+                                    {"column", column}};
         stack.erase(stack_start, stack.end());
         if (trans->reduce_symbol == 0) {
             stack.back().value = std::move(reduce_value);
