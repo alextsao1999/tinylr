@@ -11,7 +11,6 @@ struct ParserSymbol {
     int symbol;
     const char *text;
 };
-
 struct LexerState;
 struct LexerTransition {
     int begin;
@@ -77,15 +76,16 @@ template <class iter_t = const char *, class char_t = typename std::iterator_tra
 class ParserLexer {
     using uchar_t = typename std::make_unsigned<char_t>::type;
     using string_t = std::basic_string<char_t, char_traits>;
-    LexerState *lexer_state = &LexerStates[0];
+    LexerState *lexer_state /* = &LexerStates[0]*/;
+    int whitespace /*= LexerWhitespaceSymbol*/;
     iter_t current;
     iter_t end;
-    iter_t line_start;
-    iter_t token_start;
-    int token_length = 0;
+    int line_start = 0;
+    int token_start = 0;
     int token_symbol = 0;
-    string_t lexeme_;
     int line_ = 0;
+    int position_ = 0;
+    string_t lexeme_;
 private:
     inline LexerTransition *find_trans(LexerState *state, uchar_t chr) {
         LexerTransition *dot_trans = nullptr;
@@ -101,50 +101,50 @@ private:
     }
     auto advance_symbol() {
         LexerState *state = lexer_state;
+        lexeme_.clear();
         do {
-            if (*current == char_t('\0')) {
-                break;
+            if (current == end) {
+                return state->symbol;
             }
             auto *trans = find_trans(state, *current);
             if (trans) {
+                lexeme_ += *current;
                 state = trans->state;
-                if (*current++ == char_t('\n')) {
-                    line_++;
-                    line_start = current;
+                ++position_;
+                if (*current == char_t('\n')) {
+                    ++line_;
+                    line_start = position_;
                 }
+                ++current;
             } else {
                 break;
             }
         } while (true);
         if (state == lexer_state && *current != '\0') {
-            std::cout << "Unexpect char: " << *current++ << std::endl;
+            std::cout << "Unexpect char: " << *current << " line:" << line() << std::endl;
+            ++current;
             return 2; // error symbol
         }
         return state->symbol;
     }
 public:
-    ParserLexer() = default;
-    bool good() { return current < end; }
+    ParserLexer(LexerState *state, int whitespace = -1) : lexer_state(state), whitespace(whitespace) {}
     void reset(iter_t first, iter_t last) {
-        line_start = first;
         current = first;
         end = last;
     }
     void advance() {
         do {
-            token_start = current;
+            token_start = position_;
             token_symbol = advance_symbol();
-            token_length = current - token_start;
-        } while (token_symbol == LexerWhitespaceSymbol);
-        lexeme_.reserve(token_length);
-        lexeme_.assign(token_start, token_length);
+        } while (token_symbol == whitespace);
     }
     int symbol() { return token_symbol; }
     int line() const { return line_; }
     int column() const { return token_start - line_start; }
     string_t &lexeme() { return lexeme_; }
     void dump() {
-        while (good()) {
+        do {
             advance();
             std::cout << lexeme_ << "  " << token_symbol
                       << "[" << line() << ", " << column() << "]" << std::endl;
@@ -152,7 +152,7 @@ public:
             if (token_symbol == 0) {
                 break;
             }
-        }
+        } while (symbol() != 0);
         exit(0);
     }
 };
@@ -162,7 +162,7 @@ class Parser {
     using Lexer = ParserLexer<iter_t>;
     using Node = ParserNode<char_t, char_traits>;
     ParserState *parser_state = &ParserStates[0];
-    Lexer parser_lexer;
+    Lexer parser_lexer = Lexer(&LexerStates[0], LexerWhitespaceSymbol);
     bool position = false;
     ParserTransition *find_trans(ParserState *state, int symbol) {
         for (auto &trans : *state) {
@@ -178,7 +178,7 @@ public:
     void set_position(bool sp) {
         position = sp;
     }
-    void reset(iter_t first, iter_t last) {
+    void reset(iter_t first, iter_t last = iter_t()) {
         parser_lexer.reset(first, last);
     }
     void parse() {
@@ -303,7 +303,34 @@ public:
         }
         return std::move(value);
     }
+};
 
+class StreamIter {
+    std::istream *stream = nullptr;
+    int chr = 0;
+public:
+    using iterator_category = typename std::input_iterator_tag;
+    using value_type = char;
+    using difference_type = long;
+    using pointer = const char *;
+    using reference = char &;
+    constexpr StreamIter() = default;
+    StreamIter(std::istream &os) : stream(&os) {
+        ++*this;
+    }
+    inline bool empty() const { return stream == nullptr; }
+    inline bool eof() const { return  !stream || (stream && stream->eof()); }
+    inline const int operator*() const { return chr; }
+    inline StreamIter&operator++() {
+        chr = (!empty()) ? stream->get() : 0;
+        return *this;
+    }
+    inline bool operator==(const StreamIter &rhs) {
+        return rhs.empty() && eof();
+    }
+    inline bool operator!=(const StreamIter &rhs) {
+        return !(*this == rhs);
+    }
 };
 
 #endif //TINYLALR_PARSER_H

@@ -3,6 +3,7 @@
 //
 #include "lalr.h"
 #include "parser.h"
+#include <fstream>
 int main() {
     //generate();
     const char *string = "class Object {\n"
@@ -21,7 +22,14 @@ int main() {
     Parser<> parser;
     parser.reset(string, string + strlen(string));
     parser.parse();
-    std::cout << parser.value();
+    std::cout << parser.value().dump(4);
 
+    /*std::fstream fs;
+    fs.open("test.txt", std::ios::in);
+    Parser<StreamIter> parser;
+    parser.reset(fs);
+    parser.parse();
+    std::cout << parser.value();
+    fs.close();*/
     return 0;
 }

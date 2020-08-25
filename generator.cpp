@@ -336,7 +336,7 @@ void generate() {
             "classdef -> 'class' identifier '{' classbody '}' {kind:'class', name:$2, body:$4} ;"
             "classbody -> classbody classmember $1{member:$2} | classmember {kind:'classbody', member:$1}; "
             "classmember -> fielddef $1 | fundef $1;"
-            "fielddef -> vardef ';' $1;"
+            "fielddef -> vardef ';' $1{kind:'fielddef'};"
             "fundef -> type identifier '(' params ')' block {kind:'fundef', type:$1, name:$2, params:$4, block:$6};"
             "params -> params ',' paramdef $1{value:$3} | paramdef {kind:'params', value:$1} | ;"
             "paramdef -> type identifier {kind:'param', type:$1 , name:$2};"

@@ -24,9 +24,7 @@ namespace alex {
         return ReverseWrapper<decltype(container.rbegin())>(container.rbegin(), container.rend());
     }
 
-    template<typename K, typename V>
-    using Map = std::unordered_map<K, V>;
-    using viewer_t = std::string_view;
+    using string_t = std::string_view;
     struct Production;
     struct Symbol;
     struct Nonterminal;
@@ -42,8 +40,8 @@ namespace alex {
     };
     struct Action {
         int index;
-        viewer_t base;
-        std::map<viewer_t, viewer_t> fields;
+        string_t base;
+        std::map<string_t, string_t> fields;
         Action() = default;
         inline size_t size() {
             return fields.size() + (base.empty() ? 0 : 1);
@@ -82,10 +80,10 @@ namespace alex {
         }
     };
     struct Nonterminal : Symbol {
-        viewer_t identifier;
+        string_t identifier;
         std::vector<std::unique_ptr<Production>> productions;
         Nonterminal() = default;
-        Nonterminal(const viewer_t &identifier) : identifier(identifier) {}
+        Nonterminal(const string_t &identifier) : identifier(identifier) {}
         virtual ~Nonterminal() = default;
         bool is_nonterminal() const override { return true; }
         Nonterminal *nonterminal() override { return this; }
@@ -105,8 +103,8 @@ namespace alex {
         std::string to_str() override { return std::string(identifier); }
     };
     struct Terminal : Symbol {
-        viewer_t pattern;
-        Terminal(const viewer_t &pattern) : pattern(pattern) {}
+        string_t pattern;
+        Terminal(const string_t &pattern) : pattern(pattern) {}
         virtual ~Terminal() = default;
         bool is_nonterminal() const override { return false; }
         int accept(SymbolVisitor *visitor) override { return visitor->visit(this); }
@@ -196,8 +194,8 @@ namespace alex {
         Lexer lexer;
         std::vector<std::unique_ptr<Symbol>> symbols;
         std::vector<std::unique_ptr<Action>> actions;
-        std::map<viewer_t, Nonterminal *> nonterminal_table;
-        std::map<viewer_t, Terminal *> terminal_table;
+        std::map<string_t, Nonterminal *> nonterminal_table;
+        std::map<string_t, Terminal *> terminal_table;
         Nonterminal *start = nullptr;
         Nonterminal *end = nullptr;
         Nonterminal *active = nullptr;
@@ -269,7 +267,7 @@ namespace alex {
             std::cout << ">>> " << std::string(lexer.lexeme().data(), 25) << std::endl;
             std::cout << "    " << "^^^" << std::endl;
         }
-        Nonterminal *get_nonterminal(viewer_t name) {
+        Nonterminal *get_nonterminal(string_t name) {
             if (nonterminal_table.count(name)) {
                 return nonterminal_table[name];
             }
@@ -282,7 +280,7 @@ namespace alex {
             //start->push_start(nt);
             return nt;
         }
-        Terminal *get_terminal(viewer_t name) {
+        Terminal *get_terminal(string_t name) {
             if (terminal_table.count(name)) {
                 return terminal_table[name];
             } else {
@@ -502,6 +500,7 @@ namespace alex {
                 auto iter = state->items.find(item);
                 if (iter != state->items.end()) {
                     if (iter->add_lookahead(item.lookahead_symbols) && !iter->dot_reduce()) {
+                        closure(state->items);
                         propagate(state, *iter);
                     }
                 }
