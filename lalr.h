@@ -23,8 +23,7 @@ namespace alex {
     constexpr decltype(auto) Reverse(const T &container) {
         return ReverseWrapper<decltype(container.rbegin())>(container.rbegin(), container.rend());
     }
-
-    using string_t = std::string_view;
+    using string_t = std::string;
     struct Production;
     struct Symbol;
     struct Nonterminal;
@@ -113,7 +112,7 @@ namespace alex {
         }
         Terminal *terminal() override { return this; }
         std::string to_str() override {
-            auto result = pattern;
+            std::string_view result = pattern;
             result.remove_prefix(1);
             result.remove_suffix(1);
             return std::string(result);
@@ -189,18 +188,22 @@ namespace alex {
             return &(*iter);
         }
     };
-    class LALRGrammarParser {
-    public:
-        Lexer lexer;
+    struct LALRGrammar {
         std::vector<std::unique_ptr<Symbol>> symbols;
         std::vector<std::unique_ptr<Action>> actions;
-        std::map<string_t, Nonterminal *> nonterminal_table;
-        std::map<string_t, Terminal *> terminal_table;
         Nonterminal *start = nullptr;
         Nonterminal *end = nullptr;
-        Nonterminal *active = nullptr;
         Nonterminal *error = nullptr;
         Symbol *whitespace = nullptr;
+    };
+    template <class iter_t = StringIter<>>
+    class LALRGrammarParser {
+    public:
+        Lexer<iter_t> lexer;
+        LALRGrammar grammar;
+        Nonterminal *active = nullptr;
+        std::map<string_t, Nonterminal *> nonterminal_table;
+        std::map<string_t, Terminal *> terminal_table;
         int precedence = 0;
         enum TokenType {
             Token_Null,
@@ -221,41 +224,41 @@ namespace alex {
             Token_WhiteSpace,
             Token_Semicolon,
         };
-        LALRGrammarParser(const char *grammer) {
+        LALRGrammarParser(iter_t first, iter_t last = iter_t()) {
             lexer.set_whitespace("([ \r\t\n]+)|(/\\*.*\\*/)|(//.*\n)");
-            lexer.add_pattern("\"(\\\\.|.)*\"|'(\\\\.|.)*'", (SymbolType) Token_String);
-            lexer.add_pattern("[a-zA-Z_][a-zA-Z0-9_]*", (SymbolType) Token_Identifier);
-            lexer.add_pattern("\\|", (SymbolType) Token_Pipe);
-            lexer.add_pattern("\\->", (SymbolType) Token_Arrow);
-            lexer.add_pattern("%none", (SymbolType) Token_None);
-            lexer.add_pattern("%left", (SymbolType) Token_Left);
-            lexer.add_pattern("%right", (SymbolType) Token_Right);
-            lexer.add_pattern("%start", (SymbolType) Token_Start);
-            lexer.add_pattern("%whitespace", (SymbolType) Token_WhiteSpace);
-            lexer.add_pattern("\\{", (SymbolType) Token_LeftBrace);
-            lexer.add_pattern("\\}", (SymbolType) Token_RightBrace);
-            lexer.add_pattern(",", (SymbolType) Token_Comma);
-            lexer.add_pattern("[0-9]+(\\.[0-9]+)?", (SymbolType) Token_Number);
-            lexer.add_pattern("($|@)+[0-9]+", (SymbolType) Token_Desc);
-            lexer.add_pattern(":", (SymbolType) Token_Colon);
-            lexer.add_pattern(";", (SymbolType) Token_Semicolon);
+            lexer.add_pattern("\"(\\\\.|.)*\"|'(\\\\.|.)*'", Token_String);
+            lexer.add_pattern("[a-zA-Z_][a-zA-Z0-9_]*", Token_Identifier);
+            lexer.add_pattern("\\|", Token_Pipe);
+            lexer.add_pattern("\\->", Token_Arrow);
+            lexer.add_pattern("%none", Token_None);
+            lexer.add_pattern("%left", Token_Left);
+            lexer.add_pattern("%right", Token_Right);
+            lexer.add_pattern("%start", Token_Start);
+            lexer.add_pattern("%whitespace", Token_WhiteSpace);
+            lexer.add_pattern("\\{", Token_LeftBrace);
+            lexer.add_pattern("\\}", Token_RightBrace);
+            lexer.add_pattern(",", Token_Comma);
+            lexer.add_pattern("[0-9]+(\\.[0-9]+)?", Token_Number);
+            lexer.add_pattern("($|@)+[0-9]+", Token_Desc);
+            lexer.add_pattern(":", Token_Colon);
+            lexer.add_pattern(";", Token_Semicolon);
             lexer.generate_states();
 
-            start = new Nonterminal("@start");
-            start->index = 0;
-            symbols.push_back(std::unique_ptr<Symbol>(start));
+            grammar.start = new Nonterminal("@start");
+            grammar.start->index = 0;
+            grammar.symbols.push_back(std::unique_ptr<Symbol>(grammar.start));
 
-            end = new Nonterminal("@end");
-            end->index = 0;
-            symbols.push_back(std::unique_ptr<Symbol>(end));
+            grammar.end = new Nonterminal("@end");
+            grammar.end->index = 0;
+            grammar.symbols.push_back(std::unique_ptr<Symbol>(grammar.end));
 
-            error = get_nonterminal("error");
+            grammar.error = get_nonterminal("error");
 
-            lexer.reset(grammer);
+            lexer.reset(first, last);
             parse_rules();
         }
         bool match(TokenType token) {
-            if (lexer.symbol() == (SymbolType) token) {
+            if (lexer.symbol() == token) {
                 lexer.advance();
                 return true;
             }
@@ -264,7 +267,7 @@ namespace alex {
         void expect(const char *str) {
             std::cout << "expect: " << str << " line:"
                       << lexer.line() + 1 << " column:" << lexer.column() + 1 << std::endl;
-            std::cout << ">>> " << std::string(lexer.lexeme().data(), 25) << std::endl;
+            std::cout << ">>> " << lexer.lexeme() << std::endl;
             std::cout << "    " << "^^^" << std::endl;
         }
         Nonterminal *get_nonterminal(string_t name) {
@@ -272,10 +275,10 @@ namespace alex {
                 return nonterminal_table[name];
             }
             auto *nt = new Nonterminal(name);
-            nt->index = symbols.size();
+            nt->index = grammar.symbols.size();
             nt->line = lexer.line();
             nt->column = lexer.column();
-            symbols.push_back(std::unique_ptr<Symbol>(nt));
+            grammar.symbols.push_back(std::unique_ptr<Symbol>(nt));
             nonterminal_table[name] = nt;
             //start->push_start(nt);
             return nt;
@@ -285,21 +288,25 @@ namespace alex {
                 return terminal_table[name];
             } else {
                 auto *nt = new Terminal(name);
-                nt->index = symbols.size();
+                nt->index = grammar.symbols.size();
                 nt->line = lexer.line();
                 nt->column = lexer.column();
-                symbols.push_back(std::unique_ptr<Symbol>(nt));
+                grammar.symbols.push_back(std::unique_ptr<Symbol>(nt));
                 terminal_table[name] = nt;
                 return nt;
             }
         }
         void parse_rules() {
-            while (lexer.good() && parse_expression()) {
+            while (parse_expression()) {
             }
         }
         bool parse_expression() {
             lexer.advance();
-            if (lexer.symbol() == (SymbolType) Token_Identifier) {
+            if (lexer.symbol() == Token_Null) {
+                return false;
+            } else if (lexer.symbol() == Token_Semicolon) {
+                return true;
+            } else if (lexer.symbol() == Token_Identifier) {
                 active = get_nonterminal(lexer.lexeme());
                 lexer.advance();
                 if (!match(Token_Arrow)) {
@@ -308,15 +315,15 @@ namespace alex {
                 }
                 active->push_production(new Production(active));
                 while (parse_production());
-            } else if (lexer.symbol() >= (SymbolType) Token_None && lexer.symbol() <= (SymbolType) Token_Right) {
+            } else if (lexer.symbol() >= Token_None && lexer.symbol() <= Token_Right) {
                 Associativity asso;
-                if (lexer.symbol() == (SymbolType) Token_None) {
+                if (lexer.symbol() == Token_None) {
                     asso = AssoNone;
                 }
-                if (lexer.symbol() == (SymbolType) Token_Left) {
+                if (lexer.symbol() == Token_Left) {
                     asso = AssoLeft;
                 }
-                if (lexer.symbol() == (SymbolType) Token_Right) {
+                if (lexer.symbol() == Token_Right) {
                     asso = AssoRight;
                 }
                 lexer.advance();
@@ -328,16 +335,16 @@ namespace alex {
                     symbol->associativity = asso;
                     symbol->precedence = ++precedence;
                 } while (true);
-            } else if (lexer.symbol() == (SymbolType) Token_Start) {
+            } else if (lexer.symbol() == Token_Start) {
                 lexer.advance();
                 do {
                     Symbol *symbol = parse_symbol();
                     if (!symbol) {
                         break;
                     }
-                    start->push_start(symbol);
+                    grammar.start->push_start(symbol);
                 } while (true);
-            } else if (lexer.symbol() == (SymbolType) Token_WhiteSpace) {
+            } else if (lexer.symbol() == Token_WhiteSpace) {
                 lexer.advance();
                 Symbol *symbol = parse_symbol();
                 if (!symbol) {
@@ -348,7 +355,7 @@ namespace alex {
                     expect("terminal");
                     return false;
                 }
-                whitespace = symbol;
+                grammar.whitespace = symbol;
             } else {
                 expect("identifier, associativity or start");
                 return false;
@@ -357,15 +364,15 @@ namespace alex {
         }
         bool parse_production() {
             do {
-                if (lexer.symbol() == (SymbolType) Token_Pipe) {
+                if (lexer.symbol() == Token_Pipe) {
                     active->push_production(new Production(active));
                     lexer.advance();
                     return true;
-                } else if (lexer.symbol() == (SymbolType) Token_LeftBrace ||
-                           lexer.symbol() == (SymbolType) Token_Desc) {
+                } else if (lexer.symbol() == Token_LeftBrace ||
+                           lexer.symbol() == Token_Desc) {
                     active->productions.back()->action = parse_action();
                     continue;
-                } else if (lexer.symbol() == (SymbolType) Token_Semicolon) {
+                } else if (lexer.symbol() == Token_Semicolon) {
                     return false;
                 }
                 Symbol *symbol = parse_symbol();
@@ -378,11 +385,11 @@ namespace alex {
         }
         Action *parse_action() {
             Action *action = new Action();
-            actions.emplace_back(action);
-            if (lexer.symbol() == (SymbolType) Token_Desc) {
+            grammar.actions.emplace_back(action);
+            if (lexer.symbol() == Token_Desc) {
                 action->base = lexer.lexeme();
                 lexer.advance();
-                if (lexer.symbol() != (SymbolType) Token_LeftBrace) {
+                if (lexer.symbol() != Token_LeftBrace) {
                     return action;
                 }
             }
@@ -390,13 +397,13 @@ namespace alex {
                 lexer.advance();
                 auto field = lexer.lexeme();
                 lexer.advance();
-                if (lexer.symbol() != (SymbolType) Token_Colon) {
+                if (lexer.symbol() != Token_Colon) {
                     expect(":");
                 }
                 lexer.advance();
                 action->fields[field] = lexer.lexeme();
                 lexer.advance();
-            } while (lexer.symbol() == (SymbolType) Token_Comma);
+            } while (lexer.symbol() == Token_Comma);
             if (!match(Token_RightBrace)) {
                 expect("}");
             }
@@ -404,42 +411,30 @@ namespace alex {
         }
         Symbol *parse_symbol() {
             Symbol *symbol = nullptr;
-            if (lexer.symbol() == (SymbolType) Token_Identifier) {
+            if (lexer.symbol() == Token_Identifier) {
                 symbol = (get_nonterminal(lexer.lexeme()));
                 lexer.advance();
-            } else if (lexer.symbol() == (SymbolType) Token_String) {
+            } else if (lexer.symbol() == Token_String) {
                 symbol = (get_terminal(lexer.lexeme()));
                 lexer.advance();
             }
             return symbol;
         }
-        std::vector<std::unique_ptr<Symbol>> &get_symbols() { return symbols; }
     };
     class LALRGenerator : SymbolVisitor {
-        std::vector<std::unique_ptr<Symbol>> symbols;
-        std::vector<std::unique_ptr<Action>> actions;
+        LALRGrammar &grammar;
         std::vector<std::unique_ptr<GrammarState>> states;
     public:
-        Nonterminal *start;
-        Nonterminal *error;
-        Nonterminal *end;
-        Symbol *whitespace;
-        LALRGenerator(LALRGrammarParser &parser) : symbols(std::move(parser.symbols)),
-                                                   actions(std::move(parser.actions)) {
-            start = parser.start;
-            error = parser.error;
-            end = parser.end;
-            whitespace = parser.whitespace;
-
-            parser.start->follow.insert(end);
+        LALRGenerator(LALRGrammar &grammar) : grammar(grammar) {
+            grammar.start->follow.insert(grammar.end);
             int delta;
             do {
                 delta = 0;
-                for (auto &symbol : symbols) {
+                for (auto &symbol : grammar.symbols) {
                     delta += symbol->accept(this);
                 }
             } while (delta > 0);
-            generate_start(parser.start);
+            generate_start(grammar.start);
         }
         void generate() {
             int visit_count = 0;
@@ -455,9 +450,13 @@ namespace alex {
             }
             generate_index();
         }
-        inline std::vector<std::unique_ptr<Symbol>> &get_symbols() { return symbols; }
-        inline std::vector<std::unique_ptr<Action>> &get_actions() { return actions; }
+        inline std::vector<std::unique_ptr<Symbol>> &get_symbols() { return grammar.symbols; }
+        inline std::vector<std::unique_ptr<Action>> &get_actions() { return grammar.actions; }
         inline std::vector<std::unique_ptr<GrammarState>> &get_states() { return states; }
+        inline Nonterminal *get_start() { return grammar.start; }
+        inline Nonterminal *get_end() { return grammar.end; }
+        inline Nonterminal *get_error() { return grammar.error; }
+        inline Symbol *get_whitespace() { return grammar.whitespace; }
     private:
         void closure(std::set<GrammarItem> &items) {
             int delta;
@@ -557,7 +556,7 @@ namespace alex {
             GrammarState *state = new GrammarState();
             for (auto &production : symbol->productions) {
                 auto[iter, _] = state->items.insert(GrammarItem(production.get(), 0));
-                iter->lookahead_symbols.insert(end);
+                iter->lookahead_symbols.insert(grammar.end);
             }
             states.push_back(std::unique_ptr<GrammarState>(state));
             closure(state->items);
@@ -565,7 +564,7 @@ namespace alex {
         }
         void generate_transition(GrammarState *state) {
             state->visited = true;
-            for (auto &symbol : symbols) {
+            for (auto &symbol : grammar.symbols) {
                 auto *goto_state = get_goto_state(state->items, symbol.get());
                 if (goto_state) {
                     state->transitions.insert(GrammarTransition(goto_state, symbol.get()));
@@ -602,7 +601,7 @@ namespace alex {
         }
         void generate_index() {
             int index = 0;
-            for (auto &action : actions) {
+            for (auto &action : grammar.actions) {
                 action->index = index;
                 index += action->size();
             }

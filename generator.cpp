@@ -64,7 +64,7 @@ std::string parser_emit_c(LALRGenerator &generator) {
            "    #define ACTION(ACT, DEPTH) 0 \n"
            "    int state = 0, symbol = 0;\n"
            "    do {\n"
-        << "        if (SYMBOL_TOP() == " << generator.start->index << ") {\n"
+        << "        if (SYMBOL_TOP() == " << generator.get_start()->index << ") {\n"
         << "            break;\n"
         << "        }\n"
         << "        switch (state) {\n";
@@ -110,17 +110,17 @@ std::string parser_emit_c(LALRGenerator &generator) {
 }
 std::string lexer_emit_c(LALRGenerator &generator) {
     std::stringstream out;
-    Lexer lexer;
+    Lexer<> lexer;
     for (auto &symbol : generator.get_symbols()) {
         if (!symbol->is_nonterminal()) {
-            auto pattern = symbol->terminal()->pattern;
+            std::string_view pattern = symbol->terminal()->pattern;
             bool literal = pattern.front() == '\'';
             pattern.remove_prefix(1);
             pattern.remove_suffix(1);
             if (literal) {
-                lexer.add_literal(pattern, (SymbolType) symbol->index);
+                lexer.add_literal(pattern, symbol->index);
             } else {
-                lexer.add_pattern(pattern, (SymbolType) symbol->index);
+                lexer.add_pattern(pattern, symbol->index);
             }
         }
     }
@@ -184,23 +184,23 @@ std::string lexer_emit_state_machine(std::vector<std::unique_ptr<RegexState>> &s
 }
 std::string parser_emit_lexer(LALRGenerator &generator) {
     std::stringstream out;
-    Lexer lexer;
+    Lexer<> lexer;
     //lexer.set_whitespace("[ \t\n\r]+");
     for (auto &symbol : generator.get_symbols()) {
         if (!symbol->is_nonterminal()) {
-            auto pattern = symbol->terminal()->pattern;
+            std::string_view pattern = symbol->terminal()->pattern;
             bool literal = pattern.front() == '\'';
             pattern.remove_prefix(1);
             pattern.remove_suffix(1);
             if (literal) {
-                lexer.add_literal(pattern, (SymbolType) symbol->index);
+                lexer.add_literal(pattern, symbol->index);
             } else {
-                lexer.add_pattern(pattern, (SymbolType) symbol->index);
+                lexer.add_pattern(pattern, symbol->index);
             }
         }
     }
     lexer.generate_states();
-    out << "int LexerWhitespaceSymbol = " << (generator.whitespace ? generator.whitespace->index : -1)
+    out << "int LexerWhitespaceSymbol = " << (generator.get_whitespace() ? generator.get_whitespace()->index : -1)
         << ";\n";
 
     out << "LexerTransition LexerTransitions[] = {\n";
@@ -258,9 +258,10 @@ std::string parser_emit_action(LALRGenerator &generator) {
                 out << "\"" << value << "\", ";
                 out << "3, " << (std::atoi(value.data() + 1) - 1);
             } else if (value.front() == '\'') {
-                value.remove_prefix(1);
-                value.remove_suffix(1);
-                out << "\"" << value << "\", ";
+                std::string_view view = value;
+                view.remove_prefix(1);
+                view.remove_suffix(1);
+                out << "\"" << view << "\", ";
                 out << "4, 0";
             } else {
                 out << "\"" << value << "\", ";
@@ -326,48 +327,61 @@ std::string parser_emit_states(LALRGenerator &generator) {
     out << "};\n";
     return out.str();
 }
-void generate() {
-    LALRGrammarParser lalr(
-            "%left '+' '-' '*' '/';"
-            "%start programs;"
-            "%whitespace \"[ \n\r\t]+\";"
-            "programs -> programs program $1{value:$2} | program {kind:'program', value:$1}; "
-            "program -> fundef $1 | classdef $1 ;"
-            "classdef -> 'class' identifier '{' classbody '}' {kind:'class', name:$2, body:$4} ;"
-            "classbody -> classbody classmember $1{member:$2} | classmember {kind:'classbody', member:$1}; "
-            "classmember -> fielddef $1 | fundef $1;"
-            "fielddef -> vardef ';' $1{kind:'fielddef'};"
-            "fundef -> type identifier '(' params ')' block {kind:'fundef', type:$1, name:$2, params:$4, block:$6};"
-            "params -> params ',' paramdef $1{value:$3} | paramdef {kind:'params', value:$1} | ;"
-            "paramdef -> type identifier {kind:'param', type:$1 , name:$2};"
-            "vardef -> type identifier {kind:'vardef', type:$1, name:$2} | type identifier '=' expr {kind:'vardef', type:$1, name:$2, init:$4} ;"
-            "block -> '{' stmts '}' $2;"
-            "stmts -> stmts stmt ';' $1 {value:$2} | stmt ';' {kind:'stmts', value:$1};"
-            "stmt -> expr $1 | assign $1 | vardef $1;"
-            "assign -> identifier '=' expr {kind:'assign', left:$1, right:$3};"
-            "type -> identifier $1;"
-            "expr -> expr '+' expr {kind:'binary', left:$1, op:@2, right:$3}"
-            "       | expr '-' expr {kind:'binary', left:$1, op:@2, right:$3}"
-            "       | expr '*' expr {kind:'binary', left:$1, op:@2, right:$3}"
-            "       | expr '/' expr {kind:'binary', left:$1, op:@2, right:$3}"
-            "       | '(' expr ')' $2"
-            "       | primary $1"
-            ";"
-            "primary -> number $1 | invoke $1 | identifier {kind:'var', name:$1};"
-            "invoke -> identifier '(' args ')' {kind:'invoke', name:$1, args:$3};"
-            "args -> args ',' expr $1{value:$3} | expr {kind:'arg_list', value:$1};"
-            "identifier -> \"[a-zA-Z_][a-zA-Z0-9_]*\" @1;"
-            "number -> \"[0-9]+\" {kind:'number', value:@1};"
-    );
-    LALRGenerator gen(lalr);
+
+void generate_grammar_file(const char *grammar_file, const char *output) {
+    std::fstream input(grammar_file, std::ios::in);
+    LALRGrammarParser<StreamIter> lalr(input);
+    LALRGenerator gen(lalr.grammar);
     gen.generate();
     std::fstream fs;
-    fs.open("../parser.cpp", std::ios::trunc | std::ios::out);
+    fs.open(output, std::ios::trunc | std::ios::out);
+    fs << parser_emit_states(gen);
+    input.close();
+    fs.close();
+}
+void generate_grammar_string(const char *input, const char *output) {
+    LALRGrammarParser<> lalr(input);
+    LALRGenerator gen(lalr.grammar);
+    gen.generate();
+    std::fstream fs;
+    fs.open(output, std::ios::trunc | std::ios::out);
     fs << parser_emit_states(gen);
     fs.close();
 }
 
-int main() {
-    generate();
+int main(int argc, char **argv) {
+    const char *grammar = "%left '+' '-' '*' '/';"
+                          "%start programs;"
+                          "%whitespace \"[ \n\r\t]+\";"
+                          "programs -> programs program $1{value:$2} | program {kind:'program', value:$1}; "
+                          "program -> fundef $1 | classdef $1 ;"
+                          "classdef -> 'class' identifier '{' classbody '}' {kind:'class', name:$2, body:$4} ;"
+                          "classbody -> classbody classmember $1{member:$2} | classmember {kind:'classbody', member:$1}; "
+                          "classmember -> fielddef $1 | fundef $1;"
+                          "fielddef -> vardef ';' $1{kind:'fielddef'};"
+                          "fundef -> type identifier '(' params ')' block {kind:'fundef', type:$1, name:$2, params:$4, block:$6};"
+                          "params -> params ',' paramdef $1{value:$3} | paramdef {kind:'params', value:$1} | ;"
+                          "paramdef -> type identifier {kind:'param', type:$1 , name:$2};"
+                          "vardef -> type identifier {kind:'vardef', type:$1, name:$2} | type identifier '=' expr {kind:'vardef', type:$1, name:$2, init:$4} ;"
+                          "block -> '{' stmts '}' $2;"
+                          "stmts -> stmts stmt ';' $1 {value:$2} | stmt ';' {kind:'stmts', value:$1};"
+                          "stmt -> expr $1 | assign $1 | vardef $1;"
+                          "assign -> identifier '=' expr {kind:'assign', left:$1, right:$3};"
+                          "type -> identifier $1;"
+                          "expr -> expr '+' expr {kind:'binary', left:$1, op:@2, right:$3}"
+                          "       | expr '-' expr {kind:'binary', left:$1, op:@2, right:$3}"
+                          "       | expr '*' expr {kind:'binary', left:$1, op:@2, right:$3}"
+                          "       | expr '/' expr {kind:'binary', left:$1, op:@2, right:$3}"
+                          "       | '(' expr ')' $2"
+                          "       | primary $1"
+                          ";"
+                          "primary -> number $1 | invoke $1 | identifier {kind:'var', name:$1};"
+                          "invoke -> identifier '(' args ')' {kind:'invoke', name:$1, args:$3};"
+                          "args -> args ',' expr $1{value:$3} | expr {kind:'arg_list', value:$1};"
+                          "identifier -> \"[a-zA-Z_][a-zA-Z0-9_]*\" @1;"
+                          "number -> \"[0-9]+\" {kind:'number', value:@1};";
+
+    generate_grammar_string(grammar, "../parser.cpp");
+
     return 0;
 }

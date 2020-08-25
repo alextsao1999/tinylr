@@ -305,32 +305,4 @@ public:
     }
 };
 
-class StreamIter {
-    std::istream *stream = nullptr;
-    int chr = 0;
-public:
-    using iterator_category = typename std::input_iterator_tag;
-    using value_type = char;
-    using difference_type = long;
-    using pointer = const char *;
-    using reference = char &;
-    constexpr StreamIter() = default;
-    StreamIter(std::istream &os) : stream(&os) {
-        ++*this;
-    }
-    inline bool empty() const { return stream == nullptr; }
-    inline bool eof() const { return  !stream || (stream && stream->eof()); }
-    inline const int operator*() const { return chr; }
-    inline StreamIter&operator++() {
-        chr = (!empty()) ? stream->get() : 0;
-        return *this;
-    }
-    inline bool operator==(const StreamIter &rhs) {
-        return rhs.empty() && eof();
-    }
-    inline bool operator!=(const StreamIter &rhs) {
-        return !(*this == rhs);
-    }
-};
-
 #endif //TINYLALR_PARSER_H
