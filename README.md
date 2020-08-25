@@ -6,39 +6,65 @@ generate json format ast from grammar
 int main() {
     LALRGrammarParser lalr(
             "%left '+' '-' '*' '/';"
-            "%start expr;"
+            "%start programs;"
             "%whitespace \"[ \n\r\t]+\";"
-            "%none '(';"
-            "expr -> expr '+' expr {left:$1, right:$3, op:'+'}"
-            "       | expr '-' expr {left:$1, right:$3, op:'-'}"
-            "       | expr '*' expr {left:$1, right:$3, op:'*'}"
-            "       | expr '/' expr {left:$1, right:$3, op:'/'}"
+            "programs -> programs program $1{value:$2} | program {kind:'program', value:$1}; "
+            "program -> fundef $1 | classdef $1 ;"
+            "classdef -> 'class' identifier '{' classbody '}' {kind:'class', name:$2, body:$4} ;"
+            "classbody -> classbody classmember $1{member:$2} | classmember {kind:'classbody', member:$1}; "
+            "classmember -> fielddef $1 | fundef $1;"
+            "fielddef -> vardef ';' $1;"
+            "fundef -> type identifier '(' params ')' block {kind:'fundef', type:$1, name:$2, params:$4, block:$6};"
+            "params -> params ',' paramdef $1{value:$3} | paramdef {kind:'params', value:$1} | ;"
+            "paramdef -> type identifier {kind:'param', type:$1 , name:$2};"
+            "vardef -> type identifier {kind:'vardef', type:$1, name:$2} | type identifier '=' expr {kind:'vardef', type:$1, name:$2, init:$4} ;"
+            "block -> '{' stmts '}' $2;"
+            "stmts -> stmts stmt ';' $1 {value:$2} | stmt ';' {kind:'stmts', value:$1};"
+            "stmt -> expr $1 | assign $1 | vardef $1;"
+            "assign -> identifier '=' expr {kind:'assign', left:$1, right:$3};"
+            "type -> identifier $1;"
+            "expr -> expr '+' expr {kind:'binary', left:$1, op:@2, right:$3}"
+            "       | expr '-' expr {kind:'binary', left:$1, op:@2, right:$3}"
+            "       | expr '*' expr {kind:'binary', left:$1, op:@2, right:$3}"
+            "       | expr '/' expr {kind:'binary', left:$1, op:@2, right:$3}"
             "       | '(' expr ')' $2"
+            "       | primary $1"
             ";"
-            "expr -> number $1 | invoke $1;"
-            "invoke -> identifier '(' arg_list ')' {type:'invoke', name:$1, args:$3} ;"
-            "arg_list -> arg_list ',' expr $1{value:$3} | expr {type:'arg_list', value:$1} ;"
-            "identifier -> \"[a-zA-Z][a-zA-Z0-9]*\" {type:'identifier', value:@1};"
-            "number -> \"[0-9]+\" {type:'number', value:@1};"
+            "primary -> number $1 | invoke $1 | identifier {kind:'var', name:$1};"
+            "invoke -> identifier '(' args ')' {kind:'invoke', name:$1, args:$3};"
+            "args -> args ',' expr $1{value:$3} | expr {kind:'arg_list', value:$1};"
+            "identifier -> \"[a-zA-Z_][a-zA-Z0-9_]*\" @1;"
+            "number -> \"[0-9]+\" {kind:'number', value:@1};"
     );
     LALRGenerator gen(lalr);
     gen.generate();
     std::fstream fs;
-    fs.open("parser.cpp", std::ios::trunc | std::ios::out);
+    fs.open("../parser.cpp", std::ios::trunc | std::ios::out);
     fs << parser_emit_states(gen);
     fs.close();
+    return 0;
 }
 ```
 
 ```c++
 int main() {
-    const char *string = "1234 + (342 * 2)*2+3 + 22+ add(1,sub(4, 5, 6),3)+10";
+    const char *string = "class Object {\n"
+                         "    int value = 10;\n"
+                         "    int get_value(int abc) {\n"
+                         "        return(value);\n"
+                         "    }\n"
+                         "    int get_value2(int abc) {\n"
+                         "        return(value);\n"
+                         "    }\n"
+                         "}\n"
+                         "void test() {\n"
+                         "  int value = 100;\n"
+                         "  a = get(1,2,3);\n"
+                         "}\n";
     Parser<> parser;
     parser.reset(string, string + strlen(string));
     parser.parse();
-    for (auto &value : parser.stack) {
-        std::cout << value.value;
-    }
+    std::cout << parser.value();
     return 0;
 }
 ```
@@ -47,188 +73,112 @@ int main() {
 
 ```json
 {
-	"left": {
-		"left": {
-			"left": {
-				"left": {
-					"left": {
-						"position": {
-							"column": 0,
-							"line": 0
-						},
-						"type": "number",
-						"value": "1234"
-					},
-					"op": "+",
-					"position": {
-						"column": 0,
-						"line": 0
-					},
-					"right": {
-						"left": {
-							"left": {
-								"position": {
-									"column": 8,
-									"line": 0
-								},
-								"type": "number",
-								"value": "342"
-							},
-							"op": "*",
-							"position": {
-								"column": 7,
-								"line": 0
-							},
-							"right": {
-								"position": {
-									"column": 14,
-									"line": 0
-								},
-								"type": "number",
-								"value": "2"
+	"kind": "program",
+	"value": [{
+		"body": {
+			"kind": "classbody",
+			"member": [{
+				"init": {
+					"kind": "number",
+					"value": "10"
+				},
+				"kind": "vardef",
+				"name": "value",
+				"type": "int"
+			}, {
+				"block": {
+					"kind": "stmts",
+					"value": {
+						"args": {
+							"kind": "arg_list",
+							"value": {
+								"kind": "var",
+								"name": "value"
 							}
 						},
-						"op": "*",
-						"position": {
-							"column": 7,
-							"line": 0
-						},
-						"right": {
-							"position": {
-								"column": 17,
-								"line": 0
-							},
-							"type": "number",
-							"value": "2"
-						}
+						"kind": "invoke",
+						"name": "return"
 					}
 				},
-				"op": "+",
-				"position": {
-					"column": 0,
-					"line": 0
+				"kind": "fundef",
+				"name": "get_value",
+				"params": {
+					"kind": "params",
+					"value": {
+						"kind": "param",
+						"name": "abc",
+						"type": "int"
+					}
 				},
-				"right": {
-					"position": {
-						"column": 19,
-						"line": 0
-					},
-					"type": "number",
-					"value": "3"
-				}
-			},
-			"op": "+",
-			"position": {
-				"column": 0,
-				"line": 0
-			},
-			"right": {
-				"position": {
-					"column": 23,
-					"line": 0
-				},
-				"type": "number",
-				"value": "22"
-			}
-		},
-		"op": "+",
-		"position": {
-			"column": 0,
-			"line": 0
-		},
-		"right": {
-			"args": {
-				"position": {
-					"column": 31,
-					"line": 0
-				},
-				"type": "arg_list",
-				"value": [{
-					"position": {
-						"column": 31,
-						"line": 0
-					},
-					"type": "number",
-					"value": "1"
-				}, {
-					"args": {
-						"position": {
-							"column": 37,
-							"line": 0
+				"type": "int"
+			}, {
+				"block": {
+					"kind": "stmts",
+					"value": {
+						"args": {
+							"kind": "arg_list",
+							"value": {
+								"kind": "var",
+								"name": "value"
+							}
 						},
-						"type": "arg_list",
+						"kind": "invoke",
+						"name": "return"
+					}
+				},
+				"kind": "fundef",
+				"name": "get_value2",
+				"params": {
+					"kind": "params",
+					"value": {
+						"kind": "param",
+						"name": "abc",
+						"type": "int"
+					}
+				},
+				"type": "int"
+			}]
+		},
+		"kind": "class",
+		"name": "Object"
+	}, {
+		"block": {
+			"kind": "stmts",
+			"value": [{
+				"init": {
+					"kind": "number",
+					"value": "100"
+				},
+				"kind": "vardef",
+				"name": "value",
+				"type": "int"
+			}, {
+				"kind": "assign",
+				"left": "a",
+				"right": {
+					"args": {
+						"kind": "arg_list",
 						"value": [{
-							"position": {
-								"column": 37,
-								"line": 0
-							},
-							"type": "number",
-							"value": "4"
+							"kind": "number",
+							"value": "1"
 						}, {
-							"position": {
-								"column": 40,
-								"line": 0
-							},
-							"type": "number",
-							"value": "5"
+							"kind": "number",
+							"value": "2"
 						}, {
-							"position": {
-								"column": 43,
-								"line": 0
-							},
-							"type": "number",
-							"value": "6"
+							"kind": "number",
+							"value": "3"
 						}]
 					},
-					"name": {
-						"position": {
-							"column": 33,
-							"line": 0
-						},
-						"type": "identifier",
-						"value": "sub"
-					},
-					"position": {
-						"column": 33,
-						"line": 0
-					},
-					"type": "invoke"
-				}, {
-					"position": {
-						"column": 46,
-						"line": 0
-					},
-					"type": "number",
-					"value": "3"
-				}]
-			},
-			"name": {
-				"position": {
-					"column": 27,
-					"line": 0
-				},
-				"type": "identifier",
-				"value": "add"
-			},
-			"position": {
-				"column": 27,
-				"line": 0
-			},
-			"type": "invoke"
-		}
-	},
-	"op": "+",
-	"position": {
-		"column": 0,
-		"line": 0
-	},
-	"right": {
-		"position": {
-			"column": 49,
-			"line": 0
+					"kind": "invoke",
+					"name": "get"
+				}
+			}]
 		},
-		"type": "number",
-		"value": "10"
-	}
+		"kind": "fundef",
+		"name": "test",
+		"params": null,
+		"type": "void"
+	}]
 }
+
 ```
