@@ -65,17 +65,13 @@ struct ParserNode {
     int column = 0;
     std::basic_string<char_t, char_traits> lexeme;
     Value value;
-    std::basic_string<char> dump;
-
     ParserNode(ParserState *state, int symbol = 0) : state(state), symbol(symbol) {}
     ParserNode(ParserState *state, int symbol, int line, int column,
                const std::basic_string<char_t, char_traits> &lexeme, const Value &value) :
             state(state), symbol(symbol),
             line(line), column(column),
             lexeme(lexeme),
-            value(std::move(value)) {
-        dump = value.dump();
-    }
+            value(std::move(value)) {}
 };
 template <class iter_t = const char *, class char_t = typename std::iterator_traits<iter_t>::value_type, class char_traits = std::char_traits<char_t>>
 class ParserLexer {
@@ -120,6 +116,10 @@ private:
                 break;
             }
         } while (true);
+        if (state == lexer_state && *current != '\0') {
+            std::cout << "Unexpect char: " << *current++ << std::endl;
+            return 2; // error symbol
+        }
         return state->symbol;
     }
 public:
@@ -153,6 +153,7 @@ public:
                 break;
             }
         }
+        exit(0);
     }
 };
 
@@ -187,6 +188,7 @@ public:
         do {
             auto *trans = find_trans(stack.back().state, parser_lexer.symbol());
             if (!trans) {
+                expect();
                 break;
             }
             if (trans->type == 1) { //Shift
@@ -231,19 +233,40 @@ public:
 
     }
     inline void debug_shift(ParserTransition *trans) {
-        std::cout << "shift: " << ParserSymbols[parser_lexer.symbol()].text << " "
+        std::cout << "shift: " << stack.size() << " "
+                  << "[state " << (stack.back().state - ParserStates) << " -> " << (trans->state - ParserStates)
+                  << "]  [" << ParserSymbols[parser_lexer.symbol()].text << "] "
                   << parser_lexer.lexeme()
-                  << std::endl;
-
+                  << std::endl << std::endl;
     }
-    inline void debug_reduce(ParserTransition *trans, int start) {
+    inline void debug_reduce(ParserTransition *trans, ParserTransition *goto_trans, int start) {
         std::cout << "reduce: "
                   << start << " "
-                  << ParserSymbols[trans->reduce_symbol].text << " -> ";
+                  << "[back to " /*<< (stack.back().state - ParserStates) << " -> "*/
+                  << (stack[start - 1].state - ParserStates) << " -> "
+                  << (goto_trans->state - ParserStates) << "] "
+                  << ParserSymbols[trans->reduce_symbol].text << " <- ";
         for (int i = start; i < start + trans->reduce_length; ++i) {
             std::cout << "[" << stack[i].lexeme << "] " << stack[i].value << " | ";
         }
         std::cout << std::endl << std::endl;
+    }
+    inline void expect() {
+        Node &node = stack.back();
+        std::cout << "Shift Reduce Error "
+                     "line: " << node.line + 1 << " "
+                  << "column: " << node.column + 1 << " "
+                  << "token: " << parser_lexer.lexeme()
+                  << std::endl;
+        std::cout << "Expect: ";
+        for (auto &trans : *node.state) {
+            std::cout << "\"" << ParserSymbols[trans.symbol].text << "\"";
+            if (&trans != (node.state->end() - 1)) {
+                std::cout << ", ";
+            }
+        }
+        std::cout << std::endl;
+
     }
     Value handle(ReduceAction *actions, int action_count, Node *nodes) {
         if (action_count == 0) {
@@ -280,6 +303,7 @@ public:
         }
         return std::move(value);
     }
+
 };
 
 #endif //TINYLALR_PARSER_H

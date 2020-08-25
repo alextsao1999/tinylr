@@ -490,6 +490,7 @@ namespace alex {
                     auto iter = trans.state->items.find(GrammarItem(item.production, item.position + 1));
                     if (iter != trans.state->items.end()) {
                         if (iter->add_lookahead(item.lookahead_symbols)) {
+                            closure(trans.state->items);
                             propagate(trans.state, *iter);
                         }
                     }
