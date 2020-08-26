@@ -265,8 +265,9 @@ namespace alex {
             return false;
         }
         void expect(const char *str) {
-            std::cout << "expect: " << str << " line:"
-                      << lexer.line() + 1 << " column:" << lexer.column() + 1 << std::endl;
+            std::cout << "Unexpected Token '" << str
+                      << "' line:" << lexer.line() + 1
+                      << " column:" << lexer.column() + 1 << std::endl;
             std::cout << ">>> " << lexer.lexeme() << std::endl;
             std::cout << "    " << "^^^" << std::endl;
         }
@@ -437,6 +438,7 @@ namespace alex {
             generate_start(grammar.start);
         }
         void generate() {
+            check_undefine_symbol();
             int visit_count = 0;
             while (visit_count < states.size()) {
                 states[visit_count]->index = visit_count;
@@ -458,6 +460,19 @@ namespace alex {
         inline Nonterminal *get_error() { return grammar.error; }
         inline Symbol *get_whitespace() { return grammar.whitespace; }
     private:
+        void check_undefine_symbol() {
+            for (auto &symbol : grammar.symbols) {
+                if (symbol->is_nonterminal()) {
+                    auto *nonterminal = symbol->nonterminal();
+                    if (nonterminal == grammar.end || nonterminal == grammar.error) {
+                        continue;
+                    }
+                    if (nonterminal->productions.size() == 0) {
+                        std::cout << "Undefine Symbol: " << nonterminal->identifier << std::endl;
+                    }
+                }
+            }
+        }
         void closure(std::set<GrammarItem> &items) {
             int delta;
             do {
@@ -574,14 +589,14 @@ namespace alex {
         void generate_reduce(GrammarState *state) {
             for (auto &item : state->items) {
                 if (item.dot_reduce()) {
+                    auto *rightmost = item.production->rightmost_teminal();
                     for (auto &symbol : item.lookahead_symbols) {
                         //check_conflict(state, item, symbol);
-                        auto *rightmost = item.production->rightmost_teminal();
-                        if (rightmost && rightmost->precedence != 0 && symbol->precedence != 0 &&
-                            (symbol->precedence > rightmost->precedence ||
-                             (symbol->precedence == rightmost->precedence &&
-                              rightmost->associativity == AssoRight))) {
-
+                        if (rightmost && rightmost->precedence > 0 &&
+                            (rightmost->precedence < symbol->precedence ||
+                            (rightmost->precedence == symbol->precedence &&
+                             rightmost->associativity == AssoRight))) {
+                            // Shift
                         } else {
                             auto iter = state->transitions.find(GrammarTransition(nullptr, symbol));
                             if (iter == state->transitions.end()) {

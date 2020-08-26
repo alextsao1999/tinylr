@@ -4,8 +4,6 @@
 #include <sstream>
 #include <fstream>
 #include "lalr.h"
-#include "json.hpp"
-#include "parser.h"
 using namespace alex;
 std::string escape(std::string_view view) {
     std::string result;
@@ -340,7 +338,7 @@ void generate_grammar_file(const char *grammar_file, const char *output) {
     fs.close();
 }
 void generate_grammar_string(const char *input, const char *output) {
-    LALRGrammarParser<> lalr(input);
+    LALRGrammarParser<StringIter<char>> lalr(input);
     LALRGenerator gen(lalr.grammar);
     gen.generate();
     std::fstream fs;
@@ -350,38 +348,23 @@ void generate_grammar_string(const char *input, const char *output) {
 }
 
 int main(int argc, char **argv) {
-    const char *grammar = "%left '+' '-' '*' '/';"
-                          "%start programs;"
-                          "%whitespace \"[ \n\r\t]+\";"
-                          "programs -> programs program $1{value:$2} | program {kind:'program', value:$1}; "
-                          "program -> fundef $1 | classdef $1 ;"
-                          "classdef -> 'class' identifier '{' classbody '}' {kind:'class', name:$2, body:$4} ;"
-                          "classbody -> classbody classmember $1{member:$2} | classmember {kind:'classbody', member:$1}; "
-                          "classmember -> fielddef $1 | fundef $1;"
-                          "fielddef -> vardef ';' $1{kind:'fielddef'};"
-                          "fundef -> type identifier '(' params ')' block {kind:'fundef', type:$1, name:$2, params:$4, block:$6};"
-                          "params -> params ',' paramdef $1{value:$3} | paramdef {kind:'params', value:$1} | ;"
-                          "paramdef -> type identifier {kind:'param', type:$1 , name:$2};"
-                          "vardef -> type identifier {kind:'vardef', type:$1, name:$2} | type identifier '=' expr {kind:'vardef', type:$1, name:$2, init:$4} ;"
-                          "block -> '{' stmts '}' $2;"
-                          "stmts -> stmts stmt ';' $1 {value:$2} | stmt ';' {kind:'stmts', value:$1};"
-                          "stmt -> expr $1 | assign $1 | vardef $1;"
-                          "assign -> identifier '=' expr {kind:'assign', left:$1, right:$3};"
-                          "type -> identifier $1;"
-                          "expr -> expr '+' expr {kind:'binary', left:$1, op:@2, right:$3}"
-                          "       | expr '-' expr {kind:'binary', left:$1, op:@2, right:$3}"
-                          "       | expr '*' expr {kind:'binary', left:$1, op:@2, right:$3}"
-                          "       | expr '/' expr {kind:'binary', left:$1, op:@2, right:$3}"
-                          "       | '(' expr ')' $2"
-                          "       | primary $1"
-                          ";"
-                          "primary -> number $1 | invoke $1 | identifier {kind:'var', name:$1};"
-                          "invoke -> identifier '(' args ')' {kind:'invoke', name:$1, args:$3};"
-                          "args -> args ',' expr $1{value:$3} | expr {kind:'arg_list', value:$1};"
-                          "identifier -> \"[a-zA-Z_][a-zA-Z0-9_]*\" @1;"
-                          "number -> \"[0-9]+\" {kind:'number', value:@1};";
-
-    generate_grammar_string(grammar, "../parser.cpp");
-
+    const char *input = "grammar.txt";
+    const char *output = "parser.cpp";
+    bool help = false;
+    for (int index = 1; index < argc; index++) {
+        if (strcmp(argv[index], "-o") == 0 || strcmp(argv[index], "--output") == 0) {
+            output = argv[index + 1];
+            index += 2;
+        } else if (strcmp(argv[index], "-h") == 0 || strcmp(argv[index], "--help") == 0) {
+            help = true;
+            index += 1;
+        } else {
+            input = argv[index];
+        }
+    }
+    generate_grammar_file(input, output);
+    if (help) {
+        //std::cout << "Grammar Generator" << std::endl;
+    }
     return 0;
 }

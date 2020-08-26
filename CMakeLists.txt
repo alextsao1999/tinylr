@@ -7,4 +7,4 @@ include_directories(.)
 
 add_executable(tinylalr test.cpp parser.cpp)
 
-add_executable(generator generator.cpp)
+add_executable(gen generator.cpp)

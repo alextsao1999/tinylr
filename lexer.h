@@ -6,6 +6,7 @@
 #define MYLIBS_LEXER_H
 
 #include <string_view>
+#include <fstream>
 #include "regex.h"
 namespace alex {
     class StreamIter {
@@ -35,6 +36,23 @@ namespace alex {
             return !(*this == rhs);
         }
     };
+    class FileStreamWrapper {
+    private:
+        std::fstream file;
+    public:
+        FileStreamWrapper(const char *path) {
+            file.open(path, std::ios::in);
+        }
+        ~FileStreamWrapper() {
+            if (file.is_open()) {
+                file.close();
+            }
+        }
+        StreamIter begin() {
+            return StreamIter(this->file);
+        }
+        StreamIter end() { return StreamIter(); }
+    };
     template<class char_t = char>
     class StringIter {
         const char_t *current = nullptr;
@@ -63,6 +81,7 @@ namespace alex {
     class Lexer {
     public:
         using char_t = typename std::iterator_traits<iter_t>::value_type;
+        using uchar_t = typename std::make_unsigned<char_t>::type;
         using string_t = std::basic_string<char_t>;
         using symbol_t = int;
         RegexGenerator generator;
@@ -132,7 +151,7 @@ namespace alex {
                     lexeme_ += *current;
                     state = trans->state;
                     ++position_;
-                    if (*current == char_t('\n')) {
+                    if (*current == uchar_t('\n')) {
                         ++line_;
                         token_line_start = position_;
                     }

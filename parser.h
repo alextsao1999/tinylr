@@ -207,6 +207,7 @@ public:
     Value &value() { return stack[0].value; }
     inline void reduce(ParserTransition *trans) {
         auto stack_start = (stack.size() - trans->reduce_length);
+        //debug_reduce(trans, stack_start);
         Value reduce_value;
         int line = 0;
         int column = 0;
@@ -239,7 +240,8 @@ public:
                   << parser_lexer.lexeme()
                   << std::endl << std::endl;
     }
-    inline void debug_reduce(ParserTransition *trans, ParserTransition *goto_trans, int start) {
+    inline void debug_reduce(ParserTransition *trans, int start) {
+        ParserTransition *goto_trans = find_trans(stack[start - 1].state, trans->reduce_symbol);
         std::cout << "reduce: "
                   << start << " "
                   << "[back to " /*<< (stack.back().state - ParserStates) << " -> "*/
