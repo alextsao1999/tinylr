@@ -348,6 +348,10 @@ public:
         Value value = Value::array();
         ParserState *state = trans->state;
         do {
+            value.push_back({{"lexeme", parser_lexer.lexeme()},
+                             {"line",   parser_lexer.line()},
+                             {"column", parser_lexer.column()}});
+            parser_lexer.advance();
             ParserTransition *new_trans = find_trans(state, parser_lexer.symbol());
             if (new_trans) {
                 stack.emplace_back(trans->state,
@@ -362,11 +366,6 @@ public:
                     reduce(new_trans);
                 }
                 break;
-            } else {
-                value.push_back({{"lexeme", parser_lexer.lexeme()},
-                                 {"line", parser_lexer.line()},
-                                 {"column", parser_lexer.column()}});
-                parser_lexer.advance();
             }
         } while (true);
         return true;
