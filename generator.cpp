@@ -242,28 +242,39 @@ std::string parser_emit_action(LALRGenerator &generator) {
                 out << "0, ";
             } else if (action->base.front() == '@') {
                 out << "1, ";
+            } else if (action->base.front() == '#') {
+                out << "2, ";
             }
-
             out << (std::atoi(action->base.data() + 1) - 1)
                 << "}, \n";
         }
         for (auto[key, value] : action->fields) {
             out << "    {\"" << key << "\", ";
-            if (value.front() == '$') {
-                out << "\"" << value << "\", ";
-                out << "2, " << (std::atoi(value.data() + 1) - 1);
-            } else if (value.front() == '@') {
+            if (key.empty()) {
                 out << "\"" << value << "\", ";
                 out << "3, " << (std::atoi(value.data() + 1) - 1);
-            } else if (value.front() == '\'') {
+            } else if (value.front() == '$') { // $n set value
+                out << "\"" << value << "\", ";
+                out << "4, " << (std::atoi(value.data() + 1) - 1);
+            } else if (value.front() == '@') { // @n set lexeme
+                out << "\"" << value << "\", ";
+                out << "5, " << (std::atoi(value.data() + 1) - 1);
+            } else if (value.front() == '#') { // #n insert
+                out << "\"" << value << "\", ";
+                out << "6, " << (std::atoi(value.data() + 1) - 1);
+            } else if (value.front() == '\'' || value.front() == '\"') {
                 std::string_view view = value;
                 view.remove_prefix(1);
                 view.remove_suffix(1);
                 out << "\"" << view << "\", ";
-                out << "4, 0";
+                out << "7, 0";
+            } else if (value == "false") {
+                out << "\"false\", 8, 0";
+            } else if (value == "true") {
+                out << "\"true\", 8, 1";
             } else {
                 out << "\"" << value << "\", ";
-                out << "5, " << std::atoi(value.data());
+                out << "9, " << std::atoi(value.data());
             }
             out << "}, \n";
         }
@@ -349,7 +360,7 @@ void generate_grammar_string(const char *input, const char *output) {
 
 int main(int argc, char **argv) {
     const char *input = "grammar.txt";
-    const char *output = "parser.cpp";
+    const char *output = "../parser.cpp";
     bool help = false;
     for (int index = 1; index < argc; index++) {
         if (strcmp(argv[index], "-o") == 0 || strcmp(argv[index], "--output") == 0) {

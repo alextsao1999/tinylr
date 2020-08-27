@@ -5,7 +5,7 @@
 #include "parser.h"
 using namespace alex;
 int main() {
-    const char *string = "void test() {\n"
+    const char *string = "public void test() {\n"
                          "  int value = 100;\n"
                          "  a = get(1,2,3);\n"
                          "}\n";

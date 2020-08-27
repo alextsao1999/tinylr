@@ -284,6 +284,16 @@ public:
                 value = (nodes + action.value)->lexeme.c_str();
             }
             if (action.type == 2) {
+                value = Value::array(std::move((nodes + action.value)->value));
+            }
+            if (action.type == 3) { // {#n} insert
+                if (!value.is_array()) {
+                    value = Value::array(std::move(value));
+                }
+                value.emplace_back(std::move((nodes + action.value)->value));
+            }
+            if (action.type == 4) {
+                // $n set value
                 auto &field = value[std::string(action.field)];
                 if (field.empty()) {
                     field = std::move((nodes + action.value)->value);
@@ -293,14 +303,31 @@ public:
                     field = Value::array({std::move(field), std::move((nodes + action.value)->value)});
                 }
             }
-            if (action.type == 3) {
+            if (action.type == 5) {
+                // @n set lexeme
                 value[std::string(action.field)] = (nodes + action.value)->lexeme.c_str();
             }
-            if (action.type == 4) {
+            if (action.type == 6) {
+                // #n insert
+                auto &field = value[std::string(action.field)];
+                if (field.empty()) {
+                    field = Value::array();
+                }
+                if (field.is_array()) {
+                    field.emplace_back(std::move((nodes + action.value)->value));
+                } else {
+                    field = Value::array({std::move(field), std::move((nodes + action.value)->value)});
+                }
+
+            }
+            if (action.type == 7) {
                 value[std::string(action.field)] = action.desc;
             }
-            if (action.type == 5) {
-                value[std::string(action.field)] = action.value;
+            if (action.type == 8) {
+                value[std::string(action.field)] = Value::boolean_t(action.value);
+            }
+            if (action.type == 9) {
+                value[std::string(action.field)] = Value::number_integer_t(action.value);
             }
         }
         return std::move(value);

@@ -238,8 +238,8 @@ namespace alex {
             lexer.add_pattern("\\{", Token_LeftBrace);
             lexer.add_pattern("\\}", Token_RightBrace);
             lexer.add_pattern(",", Token_Comma);
-            lexer.add_pattern("[0-9]+(\\.[0-9]+)?", Token_Number);
-            lexer.add_pattern("($|@)+[0-9]+", Token_Desc);
+            lexer.add_pattern("(\\-)?[0-9]+(\\.[0-9]+)?", Token_Number);
+            lexer.add_pattern("($|@|#)+[0-9]+", Token_Desc);
             lexer.add_pattern(":", Token_Colon);
             lexer.add_pattern(";", Token_Semicolon);
             lexer.generate_states();
@@ -396,13 +396,17 @@ namespace alex {
             }
             do {
                 lexer.advance();
-                auto field = lexer.lexeme();
-                lexer.advance();
-                if (lexer.symbol() != Token_Colon) {
-                    expect(":");
+                if (lexer.symbol() == Token_Desc) {
+                    action->fields[""] = lexer.lexeme();
+                } else {
+                    auto field = lexer.lexeme();
+                    lexer.advance();
+                    if (lexer.symbol() != Token_Colon) {
+                        expect(":");
+                    }
+                    lexer.advance();
+                    action->fields[field] = lexer.lexeme();
                 }
-                lexer.advance();
-                action->fields[field] = lexer.lexeme();
                 lexer.advance();
             } while (lexer.symbol() == Token_Comma);
             if (!match(Token_RightBrace)) {
