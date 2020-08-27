@@ -6,6 +6,8 @@
 #define TINYLALR_PARSER_H
 #include "json.hpp"
 #include <iostream>
+#define TRANSITION_SHIFT 1
+#define TRANSITION_REDUCE 2
 struct ParserSymbol {
     int type;
     int symbol;
@@ -164,7 +166,7 @@ class Parser {
     ParserState *parser_state = &ParserStates[0];
     Lexer parser_lexer = Lexer(&LexerStates[0], LexerWhitespaceSymbol);
     bool position = false;
-    ParserTransition *find_trans(ParserState *state, int symbol) {
+    inline ParserTransition *find_trans(ParserState *state, int symbol) {
         for (auto &trans : *state) {
             if (trans.symbol == symbol) {
                 return &trans;
@@ -188,14 +190,13 @@ public:
         do {
             auto *trans = find_trans(stack.back().state, parser_lexer.symbol());
             if (!trans) {
-                expect();
-                break;
+                if (!handle_error()) {
+                    break;
+                }
+                continue;
             }
-            if (trans->type == 1) { //Shift
-                //debug_shift(trans);
-                stack.emplace_back(trans->state, parser_lexer.symbol(), parser_lexer.line(), parser_lexer.column(),
-                                   parser_lexer.lexeme(), Value());
-                parser_lexer.advance();
+            if (trans->type == TRANSITION_SHIFT) { //Shift
+                shift(trans);
             } else {
                 reduce(trans);
                 if (stack.back().symbol == 0) {
@@ -205,6 +206,16 @@ public:
         } while (true);
     }
     Value &value() { return stack[0].value; }
+    inline void shift(ParserTransition *trans) {
+        stack.emplace_back(trans->state,
+                           parser_lexer.symbol(),
+                           parser_lexer.line(),
+                           parser_lexer.column(),
+                           parser_lexer.lexeme(),
+                           Value());
+        parser_lexer.advance();
+        // debug_shift(trans);
+    }
     inline void reduce(ParserTransition *trans) {
         auto stack_start = (stack.size() - trans->reduce_length);
         //debug_reduce(trans, stack_start);
@@ -214,7 +225,7 @@ public:
         if (stack_start != stack.size()) {
             line = stack[stack_start].line;
             column = stack[stack_start].column;
-            reduce_value = handle(trans->actions, trans->action_count, &stack[stack_start]);
+            reduce_value = handle_action(trans->actions, trans->action_count, &stack[stack_start]);
             if (position && reduce_value.is_object()) {
                 reduce_value["position"] = {{"line",   line},
                                             {"column", column}};
@@ -228,9 +239,26 @@ public:
         auto *new_trans = find_trans(stack.back().state, trans->reduce_symbol);
         stack.emplace_back(new_trans->state,
                            trans->reduce_symbol,
-                           line, column,
+                           line,
+                           column,
                            std::string(ParserSymbols[trans->reduce_symbol].text),
                            reduce_value);
+    }
+    inline void expect() {
+        Node &node = stack.back();
+        std::cout << "Shift Reduce Error "
+                     "line: " << node.line + 1 << " "
+                  << "column: " << node.column + 1 << " "
+                  << "token: " << parser_lexer.lexeme()
+                  << std::endl;
+        std::cout << "Expect: ";
+        for (auto &trans : *node.state) {
+            std::cout << "\"" << ParserSymbols[trans.symbol].text << "\"";
+            if (&trans != (node.state->end() - 1)) {
+                std::cout << ", ";
+            }
+        }
+        std::cout << std::endl;
 
     }
     inline void debug_shift(ParserTransition *trans) {
@@ -253,47 +281,29 @@ public:
         }
         std::cout << std::endl << std::endl;
     }
-    inline void expect() {
-        Node &node = stack.back();
-        std::cout << "Shift Reduce Error "
-                     "line: " << node.line + 1 << " "
-                  << "column: " << node.column + 1 << " "
-                  << "token: " << parser_lexer.lexeme()
-                  << std::endl;
-        std::cout << "Expect: ";
-        for (auto &trans : *node.state) {
-            std::cout << "\"" << ParserSymbols[trans.symbol].text << "\"";
-            if (&trans != (node.state->end() - 1)) {
-                std::cout << ", ";
-            }
-        }
-        std::cout << std::endl;
-
-    }
-    Value handle(ReduceAction *actions, int action_count, Node *nodes) {
+    inline Value handle_action(ReduceAction *actions, int action_count, Node *nodes) {
         if (action_count == 0) {
             return std::move(nodes->value);
         }
         Value value;
         for (int i = 0; i < action_count; ++i) {
             auto &action = actions[i];
-            if (action.type == 0) {
+            if (action.type == 0) {  // $n
                 value = std::move((nodes + action.value)->value);
             }
-            if (action.type == 1) {
+            if (action.type == 1) { // @n
                 value = (nodes + action.value)->lexeme.c_str();
             }
-            if (action.type == 2) {
-                value = Value::array(std::move((nodes + action.value)->value));
+            if (action.type == 2) { // #n
+                value = Value::array({std::move((nodes + action.value)->value)});
             }
             if (action.type == 3) { // {#n} insert
                 if (!value.is_array()) {
-                    value = Value::array(std::move(value));
+                    value = Value::array({std::move(value)});
                 }
                 value.emplace_back(std::move((nodes + action.value)->value));
             }
-            if (action.type == 4) {
-                // $n set value
+            if (action.type == 4) { // key:$n set value
                 auto &field = value[std::string(action.field)];
                 if (field.empty()) {
                     field = std::move((nodes + action.value)->value);
@@ -303,12 +313,10 @@ public:
                     field = Value::array({std::move(field), std::move((nodes + action.value)->value)});
                 }
             }
-            if (action.type == 5) {
-                // @n set lexeme
+            if (action.type == 5) { // key:@n set lexeme
                 value[std::string(action.field)] = (nodes + action.value)->lexeme.c_str();
             }
-            if (action.type == 6) {
-                // #n insert
+            if (action.type == 6) { // key:#n insert
                 auto &field = value[std::string(action.field)];
                 if (field.empty()) {
                     field = Value::array();
@@ -318,7 +326,6 @@ public:
                 } else {
                     field = Value::array({std::move(field), std::move((nodes + action.value)->value)});
                 }
-
             }
             if (action.type == 7) {
                 value[std::string(action.field)] = action.desc;
@@ -332,6 +339,39 @@ public:
         }
         return std::move(value);
     }
+    inline bool handle_error() {
+        auto *trans = find_trans(stack.back().state, 2);
+        if (trans == nullptr) {
+            expect();
+            return false;
+        }
+        Value value = Value::array();
+        ParserState *state = trans->state;
+        do {
+            ParserTransition *new_trans = find_trans(state, parser_lexer.symbol());
+            if (new_trans) {
+                stack.emplace_back(trans->state,
+                                   2,
+                                   parser_lexer.line(),
+                                   parser_lexer.column(),
+                                   "error",
+                                   std::move(value));
+                if (new_trans->type == TRANSITION_SHIFT) {
+                    shift(new_trans);
+                } else {
+                    reduce(new_trans);
+                }
+                break;
+            } else {
+                value.push_back({{"lexeme", parser_lexer.lexeme()},
+                                 {"line", parser_lexer.line()},
+                                 {"column", parser_lexer.column()}});
+                parser_lexer.advance();
+            }
+        } while (true);
+        return true;
+    }
+
 };
 
 #endif //TINYLALR_PARSER_H

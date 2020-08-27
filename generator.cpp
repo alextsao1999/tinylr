@@ -212,7 +212,7 @@ std::string parser_emit_lexer(LALRGenerator &generator) {
             } else {
                 out << "nullptr";
             }
-            out << "}, \n";
+            out << "},\n";
         }
     }
     out << "};\n";
@@ -223,7 +223,7 @@ std::string parser_emit_lexer(LALRGenerator &generator) {
             << "&LexerTransitions[" << index << "], "
             << state->transitions.size() << ", ";
         out << (int) state->symbol;
-        out << "}, \n";
+        out << "},\n";
         index += state->transitions.size();
     }
     out << "};\n";
@@ -294,7 +294,7 @@ std::string parser_emit_states(LALRGenerator &generator) {
             << symbol->is_nonterminal() << ", "
             << symbol->index << ", "
             << "\"" << escape(symbol->to_str()) << "\""
-            << "}, \n";
+            << "},\n";
     }
     out << "};\n";
     out << parser_emit_lexer(generator);
@@ -320,7 +320,7 @@ std::string parser_emit_states(LALRGenerator &generator) {
             } else {
                 out << "nullptr, 0";
             }
-            out << "}, \n";
+            out << "},\n";
         }
     }
     out << "};\n";
@@ -330,7 +330,7 @@ std::string parser_emit_states(LALRGenerator &generator) {
         out << "    {"
             << "&ParserTransitions[" << index << "], "
             << state->transitions.size()
-            << "}, \n";
+            << "},\n";
         index += state->transitions.size();
     }
     out << "};\n";
