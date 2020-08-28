@@ -40,7 +40,7 @@ namespace alex {
     struct Action {
         int index;
         string_t base;
-        std::map<string_t, string_t> fields;
+        std::vector<std::tuple<string_t, string_t>> fields;
         Action() = default;
         inline size_t size() {
             return fields.size() + (base.empty() ? 0 : 1);
@@ -76,6 +76,24 @@ namespace alex {
                 }
             }
             return nullptr;
+        }
+        std::string to_str(int dot = -1) {
+            std::string result;
+            result += lhs->to_str();
+            result += " -> ";
+            int index = 0;
+            for (auto &symbol : symbols) {
+                if (index++ == dot) {
+                    result += "@ ";
+                }
+                result += symbol->to_str();
+                result += " ";
+            }
+            if (dot >= index) {
+                result += "@";
+            }
+            //result += ";";
+            return result;
         }
     };
     struct Nonterminal : Symbol {
@@ -396,8 +414,8 @@ namespace alex {
             }
             do {
                 lexer.advance();
-                if (lexer.symbol() == Token_Desc) {
-                    action->fields[""] = lexer.lexeme();
+                if (lexer.symbol() != Token_Identifier) {
+                    action->fields.emplace_back(std::pair("", lexer.lexeme()));
                 } else {
                     auto field = lexer.lexeme();
                     lexer.advance();
@@ -405,7 +423,7 @@ namespace alex {
                         expect(":");
                     }
                     lexer.advance();
-                    action->fields[field] = lexer.lexeme();
+                    action->fields.emplace_back(std::pair(field, lexer.lexeme()));
                 }
                 lexer.advance();
             } while (lexer.symbol() == Token_Comma);
@@ -595,28 +613,77 @@ namespace alex {
                 if (item.dot_reduce()) {
                     auto *rightmost = item.production->rightmost_teminal();
                     for (auto &symbol : item.lookahead_symbols) {
-                        //check_conflict(state, item, symbol);
-                        if (rightmost && rightmost->precedence > 0 &&
-                            (rightmost->precedence < symbol->precedence ||
-                            (rightmost->precedence == symbol->precedence &&
-                             rightmost->associativity == AssoRight))) {
-                            // Shift
-                        } else {
-                            auto iter = state->transitions.find(GrammarTransition(nullptr, symbol));
-                            if (iter == state->transitions.end()) {
-                                state->transitions.insert(GrammarTransition(
-                                        nullptr, symbol, TransitionReduce, item.production->lhs,
-                                        item.production->action, item.production->symbols.size()));
-                            } else {
+                        auto iter = state->transitions.find(GrammarTransition(nullptr, symbol));
+                        if (iter == state->transitions.end()) {
+                            state->transitions.insert(GrammarTransition(
+                                    nullptr,
+                                    symbol,
+                                    TransitionReduce,
+                                    item.production->lhs,
+                                    item.production->action,
+                                    item.production->symbols.size()));
+                        } else if (rightmost && rightmost->precedence > 0) {
+                            if ((rightmost->precedence < symbol->precedence ||
+                                 (rightmost->precedence == symbol->precedence &&
+                                  rightmost->associativity == AssoRight))) {
+                                // Shift
+                                iter->type = TransitionShift;
+                            }
+
+                            if (((rightmost->precedence > symbol->precedence) ||
+                                 rightmost->precedence == symbol->precedence &&
+                                 rightmost->associativity == AssoLeft)) {
+                                // Reduce
                                 iter->type = TransitionReduce;
                                 iter->reduce_symbol = item.production->lhs;
                                 iter->reduce_action = item.production->action;
                                 iter->reduce_length = item.production->symbols.size();
                             }
+
+                        } else if (iter->type == TransitionShift) {
+                            for (auto &dot : state->items) {
+                                if (dot.dot_symbol() == iter->symbol) {
+                                    if (dot.production->lhs->precedence == item.production->lhs->precedence) {
+                                        shift_reduce_conflict(state, iter->symbol, item.production);
+                                    }
+                                    if (dot.production->lhs->precedence < item.production->lhs->precedence) {
+                                        iter->type = TransitionReduce;
+                                        iter->reduce_symbol = item.production->lhs;
+                                        iter->reduce_action = item.production->action;
+                                        iter->reduce_length = item.production->symbols.size();
+                                    }
+                                    break;
+                                }
+                            }
+                        } else {
+                            reduce_reduce_conflict(state, iter->symbol);
                         }
                     }
                 }
             }
+        }
+        void reduce_reduce_conflict(GrammarState *state, Symbol *symbol) {
+            std::cout << "Reduce Reduce Conflict lookahead " << symbol->to_str() << std::endl;
+            for (auto &conf : state->items) {
+                if (conf.dot_reduce() && conf.is_lookahead(symbol)) {
+                    std::cout << "Reduce " << conf.production->to_str() << std::endl;
+                }
+            }
+            std::cout << std::endl;
+        }
+        void shift_reduce_conflict(GrammarState *state, Symbol *symbol, Production *production) {
+            std::cout << "Shift Reduce Conflict lookahead " << symbol->to_str() << std::endl;
+            for (auto &conf : state->items) {
+                if (conf.dot_symbol() == symbol) {
+                    std::cout << "Shift " << conf.production->to_str(conf.position) << std::endl;
+                }
+            }
+            std::cout << "Reduce " << production->to_str() << std::endl;
+            for (auto &conf : state->items) {
+                std::cout << "  | " << conf.production->to_str(conf.position) << std::endl;
+            }
+            std::cout << std::endl;
+
         }
         void generate_index() {
             int index = 0;

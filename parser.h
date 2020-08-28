@@ -8,6 +8,15 @@
 #include <iostream>
 #define TRANSITION_SHIFT 1
 #define TRANSITION_REDUCE 2
+#define ACTION_TYPE_INIT 0
+#define ACTION_TYPE_INSERT 1
+#define ACTION_TYPE_SET 2
+#define ACTION_TYPE_INSERT_INT 3
+#define ACTION_TYPE_INSERT_BOOL 4
+#define ACTION_TYPE_INSERT_STRING 5
+#define ACTION_TYPE_SET_INT 6
+#define ACTION_TYPE_SET_BOOL 7
+#define ACTION_TYPE_SET_STRING 8
 struct ParserSymbol {
     int type;
     int symbol;
@@ -288,53 +297,64 @@ public:
         Value value;
         for (int i = 0; i < action_count; ++i) {
             auto &action = actions[i];
-            if (action.type == 0) {  // $n
+            if (action.type == ACTION_TYPE_INIT && *action.desc == '$') {  // $n
                 value = std::move((nodes + action.value)->value);
             }
-            if (action.type == 1) { // @n
-                value = (nodes + action.value)->lexeme.c_str();
+            if (action.type == ACTION_TYPE_INIT && *action.desc == '@') { // @n
+                value = (nodes + action.value)->lexeme;
             }
-            if (action.type == 2) { // #n
+            if (action.type == ACTION_TYPE_INIT && *action.desc == '#') { // #n
                 value = Value::array({std::move((nodes + action.value)->value)});
             }
-            if (action.type == 3) { // {#n} insert
+            if (action.type == ACTION_TYPE_INSERT) { // {$n|@n|#n}
                 if (!value.is_array()) {
                     value = Value::array({std::move(value)});
                 }
-                value.emplace_back(std::move((nodes + action.value)->value));
+                if (*action.desc == '@') {
+                    value.emplace_back((nodes + action.value)->lexeme);
+                } else {
+                    value.emplace_back(std::move((nodes + action.value)->value));
+                }
             }
-            if (action.type == 4) { // key:$n set value
+            if (action.type == ACTION_TYPE_SET && *action.desc == '$') { // key:$n set value
+                value[std::string(action.field)] = std::move((nodes + action.value)->value);
+            }
+            if (action.type == ACTION_TYPE_SET && *action.desc == '@') { // key:@n set lexeme
+                value[std::string(action.field)] = (nodes + action.value)->lexeme;
+            }
+            if (action.type == ACTION_TYPE_SET && *action.desc == '#') { // key:#n insert
                 auto &field = value[std::string(action.field)];
-                if (field.empty()) {
-                    field = std::move((nodes + action.value)->value);
-                } else if (field.is_array()) {
+                if (field.is_null()) {
                     field.emplace_back(std::move((nodes + action.value)->value));
                 } else {
                     field = Value::array({std::move(field), std::move((nodes + action.value)->value)});
                 }
             }
-            if (action.type == 5) { // key:@n set lexeme
-                value[std::string(action.field)] = (nodes + action.value)->lexeme.c_str();
-            }
-            if (action.type == 6) { // key:#n insert
-                auto &field = value[std::string(action.field)];
-                if (field.empty()) {
-                    field = Value::array();
-                }
-                if (field.is_array()) {
-                    field.emplace_back(std::move((nodes + action.value)->value));
-                } else {
-                    field = Value::array({std::move(field), std::move((nodes + action.value)->value)});
-                }
-            }
-            if (action.type == 7) {
+            if (action.type == ACTION_TYPE_SET_STRING) {  // key:'string'
                 value[std::string(action.field)] = action.desc;
             }
-            if (action.type == 8) {
+            if (action.type == ACTION_TYPE_SET_BOOL) { // key:bool
                 value[std::string(action.field)] = Value::boolean_t(action.value);
             }
-            if (action.type == 9) {
+            if (action.type == ACTION_TYPE_SET_INT) { // key:number
                 value[std::string(action.field)] = Value::number_integer_t(action.value);
+            }
+            if (action.type == ACTION_TYPE_INSERT_STRING) {
+                if (value.empty()) {
+                    value = action.desc;
+                } else {
+                    if (value.is_array()) {
+                        value.emplace_back(action.desc);
+                    } else {
+                        value = Value::array({std::move(value), action.desc});
+                    }
+                }
+            }
+            if (action.type == ACTION_TYPE_INSERT_BOOL) { // bool
+                value.emplace_back(Value::boolean_t(action.value));
+            }
+            if (action.type == ACTION_TYPE_INSERT_INT) { // number
+                value.emplace_back(Value::number_integer_t(action.value));
             }
         }
         return std::move(value);

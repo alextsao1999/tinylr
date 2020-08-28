@@ -10,10 +10,12 @@ int main() {
                          "  a = get(1,2,3);\n"
                          "}\n";
     //FileStreamWrapper file("test.txt");
-    Parser<StringIter<char>> parser;
-    parser.reset(string);
-    parser.parse();
-    std::cout << parser.value().dump(4);
+    //Parser<StringIter<char>> parser;
+    //parser.reset(string);
+    //parser.parse();
+    //std::cout << parser.value().dump(4);
+    const char *str = "";
+    std::cout << (int) *str;
 
     return 0;
 }

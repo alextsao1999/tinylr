@@ -4,6 +4,16 @@
 #include <sstream>
 #include <fstream>
 #include "lalr.h"
+#define ACTION_TYPE_INIT 0
+#define ACTION_TYPE_INSERT 1
+#define ACTION_TYPE_SET 2
+#define ACTION_TYPE_INSERT_INT 3
+#define ACTION_TYPE_INSERT_BOOL 4
+#define ACTION_TYPE_INSERT_STRING 5
+#define ACTION_TYPE_SET_INT 6
+#define ACTION_TYPE_SET_BOOL 7
+#define ACTION_TYPE_SET_STRING 8
+
 using namespace alex;
 std::string escape(std::string_view view) {
     std::string result;
@@ -229,6 +239,7 @@ std::string parser_emit_lexer(LALRGenerator &generator) {
     out << "};\n";
     return out.str();
 }
+
 std::string parser_emit_action(LALRGenerator &generator) {
     std::stringstream out;
     out << "ReduceAction ParserActions[] = {\n";
@@ -237,44 +248,33 @@ std::string parser_emit_action(LALRGenerator &generator) {
             out << "    {"
                    "\"\", \""
                 << action->base << "\", ";
-
-            if (action->base.front() == '$') {
-                out << "0, ";
-            } else if (action->base.front() == '@') {
-                out << "1, ";
-            } else if (action->base.front() == '#') {
-                out << "2, ";
-            }
+            out << ACTION_TYPE_INIT << ", ";
             out << (std::atoi(action->base.data() + 1) - 1)
                 << "}, \n";
         }
         for (auto[key, value] : action->fields) {
             out << "    {\"" << key << "\", ";
-            if (key.empty()) {
+            if (value.front() == '$' || value.front() == '#' || value.front() == '@') {
+                // $ set value
                 out << "\"" << value << "\", ";
-                out << "3, " << (std::atoi(value.data() + 1) - 1);
-            } else if (value.front() == '$') { // $n set value
-                out << "\"" << value << "\", ";
-                out << "4, " << (std::atoi(value.data() + 1) - 1);
-            } else if (value.front() == '@') { // @n set lexeme
-                out << "\"" << value << "\", ";
-                out << "5, " << (std::atoi(value.data() + 1) - 1);
-            } else if (value.front() == '#') { // #n insert
-                out << "\"" << value << "\", ";
-                out << "6, " << (std::atoi(value.data() + 1) - 1);
+                out << (key.empty() ? ACTION_TYPE_INSERT : ACTION_TYPE_SET) << ", "
+                    << (std::atoi(value.data() + 1) - 1);
             } else if (value.front() == '\'' || value.front() == '\"') {
                 std::string_view view = value;
                 view.remove_prefix(1);
                 view.remove_suffix(1);
                 out << "\"" << view << "\", ";
-                out << "7, 0";
+                out << (key.empty() ? ACTION_TYPE_INSERT_STRING : ACTION_TYPE_SET_STRING) << ", 0";
             } else if (value == "false") {
-                out << "\"false\", 8, 0";
+                out << "\"false\", ";
+                out << (key.empty() ? ACTION_TYPE_INSERT_BOOL : ACTION_TYPE_SET_BOOL) << ", 0";
             } else if (value == "true") {
-                out << "\"true\", 8, 1";
+                out << "\"true\", ";
+                out << (key.empty() ? ACTION_TYPE_INSERT_BOOL : ACTION_TYPE_SET_BOOL) << ", 1";
             } else {
                 out << "\"" << value << "\", ";
-                out << "9, " << std::atoi(value.data());
+                out << (key.empty() ? ACTION_TYPE_INSERT_INT : ACTION_TYPE_SET_INT)
+                    << ", " << std::atoi(value.data());
             }
             out << "}, \n";
         }
