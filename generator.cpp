@@ -318,7 +318,8 @@ std::string parser_emit_states(LALRGenerator &generator) {
                 out << "nullptr, ";
             }
             out << (trans.reduce_symbol ? trans.reduce_symbol->index : 0) << ", "
-                << trans.reduce_length << ", ";
+                << trans.reduce_length << ", "
+                << trans.precedence << ", ";
             if (trans.reduce_action) {
                 out << "&ParserActions[" << trans.reduce_action->index << "], "
                     << trans.reduce_action->size();

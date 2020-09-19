@@ -11,17 +11,17 @@
 
 namespace alex {
     template<typename It>
-    class ReverseWrapper {
+    class IteratorWrapper {
         It first;
         It last;
     public:
-        constexpr ReverseWrapper(It first, It last) : first(first), last(last) {}
+        constexpr IteratorWrapper(It first, It last) : first(first), last(last) {}
         constexpr It begin() { return first; }
         constexpr It end() { return last; }
     };
     template<typename T>
     constexpr decltype(auto) Reverse(const T &container) {
-        return ReverseWrapper<decltype(container.rbegin())>(container.rbegin(), container.rend());
+        return IteratorWrapper<decltype(container.rbegin())>(container.rbegin(), container.rend());
     }
     using string_t = std::string;
     struct Production;
@@ -197,9 +197,10 @@ namespace alex {
         mutable Symbol *reduce_symbol = nullptr;
         mutable int reduce_length = 0;
         mutable Action *reduce_action = nullptr;
+        mutable int precedence = 0;
         GrammarTransition(GrammarState *state, Symbol *symbol) : state(state), symbol(symbol) {}
-        GrammarTransition(GrammarState *state, Symbol *symbol, TransitionType type, Symbol *reduce_symbol = nullptr, Action *reduce_action = nullptr, int reduce_length = 0)
-                : state(state), symbol(symbol), type(type), reduce_symbol(reduce_symbol), reduce_action(reduce_action), reduce_length(reduce_length) {
+        GrammarTransition(GrammarState *state, Symbol *symbol, TransitionType type, Symbol *reduce_symbol = nullptr, Action *reduce_action = nullptr, int reduce_length = 0, int precedence = 0)
+                : state(state), symbol(symbol), type(type), reduce_symbol(reduce_symbol), reduce_action(reduce_action), reduce_length(reduce_length), precedence(precedence) {
         }
         inline bool operator<(const GrammarTransition&rhs) const {
             return symbol < rhs.symbol;
@@ -491,6 +492,7 @@ namespace alex {
         }
         void generate() {
             check_undefine_symbol();
+            check_nonterminal_precedence(grammar.start);
             int visit_count = 0;
             while (visit_count < states.size()) {
                 states[visit_count]->index = visit_count;
@@ -521,6 +523,20 @@ namespace alex {
                     }
                     if (nonterminal->productions.size() == 0) {
                         std::cout << "Undefine Symbol: " << nonterminal->identifier << std::endl;
+                    }
+                }
+            }
+        }
+        int precedence = 0;
+        void check_nonterminal_precedence(Symbol *symbol) {
+            if (symbol->is_nonterminal()) {
+                if (symbol->precedence == 0) {
+                    symbol->precedence = ++precedence;
+                    auto *nonterminal = symbol->nonterminal();
+                    for (auto &prod : nonterminal->productions) {
+                        for (auto &sym : prod->symbols) {
+                            check_nonterminal_precedence(sym);
+                        }
                     }
                 }
             }
@@ -651,7 +667,8 @@ namespace alex {
                                     TransitionReduce,
                                     item.production->lhs,
                                     item.production->action,
-                                    item.production->symbols.size()));
+                                    item.production->symbols.size(),
+                                    item.production->lhs->precedence));
                         } else if (rightmost && rightmost->precedence > 0) {
                             if ((rightmost->precedence < symbol->precedence ||
                                  (rightmost->precedence == symbol->precedence &&
@@ -669,57 +686,16 @@ namespace alex {
                                 iter->reduce_action = item.production->action;
                                 iter->reduce_length = item.production->symbols.size();
                             }
-
-                        } else if (iter->type == TransitionShift) {
-                            for (auto &dot : state->items) {
-                                if (dot.dot_symbol() == iter->symbol) {
-                                    if (dot.production->lhs->precedence == item.production->lhs->precedence) {
-                                        //shift_reduce_conflict(state, iter->symbol, item.production);
-                                        state->conflict = ConflictShiftReduce;
-                                        state->transitions.insert(GrammarTransition(
-                                                nullptr,
-                                                symbol,
-                                                TransitionReduce,
-                                                item.production->lhs,
-                                                item.production->action,
-                                                item.production->symbols.size()));
-                                    }
-                                    if (dot.production->lhs->precedence < item.production->lhs->precedence) {
-                                        iter->type = TransitionReduce;
-                                        iter->reduce_symbol = item.production->lhs;
-                                        iter->reduce_action = item.production->action;
-                                        iter->reduce_length = item.production->symbols.size();
-                                    }
-                                    break;
-                                }
-                            }
                         } else {
-                            for (auto &conf : state->items) {
-                                if (&conf == &item) {
-                                    continue;
-                                }
-                                if (conf.dot_reduce() && conf.is_lookahead(symbol)) {
-                                    if (conf.production->lhs->precedence == item.production->lhs->precedence) {
-                                        //reduce_reduce_conflict(state, iter->symbol);
-                                        state->conflict = ConflictReduceReduce;
-                                        state->transitions.insert(GrammarTransition(
-                                                nullptr,
-                                                symbol,
-                                                TransitionReduce,
-                                                item.production->lhs,
-                                                item.production->action,
-                                                item.production->symbols.size()));
-                                    }
-                                    if (conf.production->lhs->precedence < item.production->lhs->precedence) {
-                                        iter->type = TransitionReduce;
-                                        iter->reduce_symbol = item.production->lhs;
-                                        iter->reduce_action = item.production->action;
-                                        iter->reduce_length = item.production->symbols.size();
-                                    }
-                                    break;
-                                }
-                            }
-
+                            state->conflict = iter->type == TransitionShift ? ConflictShiftReduce : ConflictReduceReduce;
+                            state->transitions.insert(GrammarTransition(
+                                    nullptr,
+                                    symbol,
+                                    TransitionReduce,
+                                    item.production->lhs,
+                                    item.production->action,
+                                    item.production->symbols.size(),
+                                    item.production->lhs->precedence));
                         }
                     }
                 }
