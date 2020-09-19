@@ -269,7 +269,7 @@ std::string parser_emit_action(LALRGenerator &generator, const char *prefix) {
             out << (std::atoi(action->base.data() + 1) - 1)
                 << "},\n";
         }
-        for (auto[key, value, symbol] : action->fields) {
+        for (auto[key, value, symbol] : Reverse(action->fields)) {
             out << "    {\"" << key << "\", ";
             if (value.front() == '$' || value.front() == '#' || value.front() == '@') {
                 // $ set value
@@ -331,10 +331,13 @@ std::string parser_emit_states(LALRGenerator &generator) {
     out << "};\n";
     int index = 0;
     out << "ParserState ParserStates[] = {\n";
+    int state_index = 0;
     for (auto &state : generator.get_states()) {
         out << "    {"
             << "&ParserTransitions[" << index << "], "
-            << state->transitions.size()
+            << state->transitions.size() << ", "
+            << state->conflict << ", "
+            << (state_index++)
             << "},\n";
         index += state->transitions.size();
     }
@@ -771,7 +774,7 @@ void generate(LALRGenerator &gen, const char *output, const char *prefix) {
     fs.close();
     std::string file(output);
     std::string str = file.substr(0, file.find_last_of('.')) + ".h";
-    generate_header(gen, str.c_str(), prefix);
+    //generate_header(gen, str.c_str(), prefix);
 }
 void generate_grammar_file(const char *grammar_file, const char *output, const char *prefix) {
     std::fstream input(grammar_file, std::ios::in);
@@ -793,6 +796,7 @@ int main(int argc, char **argv) {
     const char *output = "../parser.cpp";
     const char *prefix = "TYPE_";
     bool help = false;
+    bool enable_glr = false;
     for (int index = 1; index < argc; index++) {
         if (strcmp(argv[index], "-o") == 0 || strcmp(argv[index], "--output") == 0) {
             output = argv[index + 1];
@@ -803,6 +807,9 @@ int main(int argc, char **argv) {
         } else if (strcmp(argv[index], "-p") == 0 || strcmp(argv[index], "--prefix") == 0) {
             prefix = argv[index + 1];
             index += 2;
+        } else if (strcmp(argv[index], "-g") == 0 || strcmp(argv[index], "--glr") == 0) {
+            enable_glr = true;
+            index += 1;
         } else {
             input = argv[index];
         }

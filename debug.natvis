@@ -1,0 +1,83 @@
+<?xml version="1.0" encoding="utf-8"?>
+<AutoVisualizer xmlns="http://schemas.microsoft.com/vstudio/debugger/natvis/2010">
+    <Type Name="nlohmann::basic_json&lt;*&gt;">
+        <DisplayString Condition="m_type == nlohmann::detail::value_t::null">null</DisplayString>
+        <DisplayString Condition="m_type == nlohmann::detail::value_t::object">{*(m_value.object)}</DisplayString>
+        <DisplayString Condition="m_type == nlohmann::detail::value_t::array">{*(m_value.array)}</DisplayString>
+        <DisplayString Condition="m_type == nlohmann::detail::value_t::string">{*(m_value.string)}</DisplayString>
+        <DisplayString Condition="m_type == nlohmann::detail::value_t::boolean">{m_value.boolean}</DisplayString>
+        <DisplayString Condition="m_type == nlohmann::detail::value_t::number_integer">{m_value.number_integer}</DisplayString>
+        <DisplayString Condition="m_type == nlohmann::detail::value_t::number_unsigned">{m_value.number_unsigned}</DisplayString>
+        <DisplayString Condition="m_type == nlohmann::detail::value_t::number_float">{m_value.number_float}</DisplayString>
+        <DisplayString Condition="m_type == nlohmann::detail::value_t::discarded">discarded</DisplayString>
+        <Expand>
+            <ExpandedItem Condition="m_type == nlohmann::detail::value_t::object">
+                *(m_value.object),view(simple)
+            </ExpandedItem>
+            <ExpandedItem Condition="m_type == nlohmann::detail::value_t::array">
+                *(m_value.array),view(simple)
+            </ExpandedItem>
+        </Expand>
+    </Type>
+    <Type Name="std::pair&lt;*, nlohmann::basic_json&lt;*&gt;&gt;" IncludeView="MapHelper">
+        <DisplayString>{second}</DisplayString>
+        <Expand>
+            <ExpandedItem>second</ExpandedItem>
+        </Expand>
+    </Type>
+    <Type Name="ParserState">
+        <DisplayString Condition="conflict == 0">{{ Index = {index}, Size = {transition_count} }}</DisplayString>
+        <DisplayString Condition="conflict == 1">{{ Index = {index}, Size = {transition_count}, ShiftReduce }}</DisplayString>
+        <DisplayString Condition="conflict == 2">{{ Index = {index}, Size = {transition_count}, ReduceReduce }}</DisplayString>
+        <Expand>
+            <ArrayItems>
+                <Size>transition_count</Size>
+                <ValuePointer>transitions</ValuePointer>
+            </ArrayItems>
+        </Expand>
+    </Type>
+    <Type Name="ParserTransition">
+        <DisplayString Condition="type == 0">{{ None }}</DisplayString>
+        <DisplayString Condition="type == 1">{{ {ParserSymbols[symbol].text} ({symbol}) | Shift -> {state} }}</DisplayString>
+        <DisplayString Condition="type == 2">{{ {ParserSymbols[symbol].text} ({symbol}) | Reduce {reduce_length} -> {ParserSymbols[reduce_symbol].text} }}</DisplayString>
+        <Expand>
+            <Item Name="[State]">state</Item>
+            <Item Name="[Symbol]">ParserSymbols[symbol].text</Item>
+            <ArrayItems>
+                <Size>action_count</Size>
+                <ValuePointer>actions</ValuePointer>
+            </ArrayItems>
+        </Expand>
+    </Type>
+    <Type Name="std::shared_ptr&lt;*&gt;">
+        <DisplayString Condition="_Ptr == 0">empty</DisplayString>
+        <DisplayString Condition="_Ptr != 0">{*_Ptr}</DisplayString>
+        <Expand>
+            <ExpandedItem>_Ptr</ExpandedItem>
+        </Expand>
+    </Type>
+    <Type Name="ParserTreeNode&lt;*&gt;">
+        <DisplayString>{{ Symbol = {ParserSymbols[symbol].text}, Lexeme = {lexeme}, State = {state} }}</DisplayString>
+        <Expand>
+            <Item Name="[Prev]">prev</Item>
+            <Item Name="[Prevs]">prevs</Item>
+            <Item Name="[Links]">links</Item>
+<!--            <Item Name="[Next]">next</Item>-->
+            <Item Name="[State]">state</Item>
+            <Item Name="[Symbol]">ParserSymbols[symbol].text</Item>
+            <Item Name="[Lexeme]">lexeme</Item>
+            <Item Name="[Value]">value</Item>
+            <Item Name="[Depth]">depth</Item>
+            <Item Name="[Merge]">merge</Item>
+            <Item Name="[Line]">line</Item>
+            <Item Name="[column]">column</Item>
+        </Expand>
+    </Type>
+    <Type Name="std::pair&lt;*&gt;">
+        <DisplayString IncludeView="noparens">{first}, {second}</DisplayString>
+        <DisplayString ExcludeView="noparens">({first}, {second})</DisplayString>
+        <Expand>
+            <ExpandedItem>second</ExpandedItem>
+        </Expand>
+    </Type>
+</AutoVisualizer>

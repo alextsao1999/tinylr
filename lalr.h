@@ -55,6 +55,7 @@ namespace alex {
         bool nullable = false;
         std::set<Symbol *> first;
         std::set<Symbol *> follow;
+        std::set<Symbol *> contain;
         virtual ~Symbol() = default;
         virtual bool is_nonterminal() const { return false; }
         virtual int accept(SymbolVisitor *visitor) { return 0; };
@@ -183,6 +184,11 @@ namespace alex {
         TransitionShift,
         TransitionReduce
     };
+    enum ConflictType {
+        ConflictNone,
+        ConflictShiftReduce,
+        ConflictReduceReduce,
+    };
     struct GrammarTransition {
         GrammarState *state;
         Symbol *symbol;
@@ -203,7 +209,8 @@ namespace alex {
         int index = 0;
         bool visited = false;
         std::set<GrammarItem> items; // Item set
-        std::set<GrammarTransition> transitions;
+        std::multiset<GrammarTransition> transitions;
+        ConflictType conflict = ConflictNone;
         GrammarState() = default;
         GrammarState(const std::set<GrammarItem> &items) : items(std::move(items)) {}
         const GrammarTransition *find_trans(Symbol *symbol) {
@@ -667,7 +674,15 @@ namespace alex {
                             for (auto &dot : state->items) {
                                 if (dot.dot_symbol() == iter->symbol) {
                                     if (dot.production->lhs->precedence == item.production->lhs->precedence) {
-                                        shift_reduce_conflict(state, iter->symbol, item.production);
+                                        //shift_reduce_conflict(state, iter->symbol, item.production);
+                                        state->conflict = ConflictShiftReduce;
+                                        state->transitions.insert(GrammarTransition(
+                                                nullptr,
+                                                symbol,
+                                                TransitionReduce,
+                                                item.production->lhs,
+                                                item.production->action,
+                                                item.production->symbols.size()));
                                     }
                                     if (dot.production->lhs->precedence < item.production->lhs->precedence) {
                                         iter->type = TransitionReduce;
@@ -685,7 +700,15 @@ namespace alex {
                                 }
                                 if (conf.dot_reduce() && conf.is_lookahead(symbol)) {
                                     if (conf.production->lhs->precedence == item.production->lhs->precedence) {
-                                        reduce_reduce_conflict(state, iter->symbol);
+                                        //reduce_reduce_conflict(state, iter->symbol);
+                                        state->conflict = ConflictReduceReduce;
+                                        state->transitions.insert(GrammarTransition(
+                                                nullptr,
+                                                symbol,
+                                                TransitionReduce,
+                                                item.production->lhs,
+                                                item.production->action,
+                                                item.production->symbols.size()));
                                     }
                                     if (conf.production->lhs->precedence < item.production->lhs->precedence) {
                                         iter->type = TransitionReduce;
