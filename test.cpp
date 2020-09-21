@@ -6,15 +6,16 @@
 using namespace alex;
 int main() {
     //const char *string = "a < b > c;";
-    const char *string = "int a = 10;"
-                         "int main() {"
+    const char *string = "int main() {"
                          "  a<b> c;"
                          "}";
     GLRParser<StringIter<char>> parser;
+    parser.set_position(true);
     parser.reset(string);
     parser.parse();
     if (parser.accept()) {
-        std::cout << parser.value().dump();
+        json value = std::move(parser.value());
+        std::cout << value.dump(4);
     }
 
     return 0;

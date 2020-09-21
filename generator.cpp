@@ -15,6 +15,12 @@
 #define ACTION_TYPE_SET_STRING 8
 
 using namespace alex;
+struct Options {
+    const char *input;
+    const char *output;
+    const char *prefix;
+    int type;
+};
 std::string escape(std::string_view view) {
     std::string result;
     result.reserve(view.length());
@@ -337,15 +343,19 @@ std::string parser_emit_states(LALRGenerator &generator) {
         out << "    {"
             << "&ParserTransitions[" << index << "], "
             << state->transitions.size() << ", "
-            << state->conflict << ", "
-            << (state_index++)
-            << "},\n";
+            << state->conflict << ", ";
+        if (state->error) {
+            out << "&ParserTransitions[" << state->error->index << "]";
+        } else {
+            out << "nullptr";
+        }
+        out << "},\n";
         index += state->transitions.size();
     }
     out << "};\n";
     return out.str();
 }
-void generate_header(LALRGenerator &generator, const char *output, const char *prefix) {
+void generate_header(LALRGenerator &generator, const char *output, const char *prefix, int parser_type) {
     const char *header = "struct ParserSymbol {\n"
                          "    int type;\n"
                          "    int symbol;\n"
@@ -377,12 +387,17 @@ void generate_header(LALRGenerator &generator, const char *output, const char *p
                          "    ParserState *state;\n"
                          "    int reduce_symbol;\n"
                          "    int reduce_length;\n"
+                         "    int precedence;\n"
                          "    ReduceAction *actions;\n"
                          "    int action_count;\n"
+                         "    inline bool accept() const { return reduce_symbol == 0 && type == TRANSITION_REDUCE; }\n"
+                         "    inline bool error() const { return symbol == 2 && type == TRANSITION_SHIFT; }\n"
                          "};\n"
                          "struct ParserState {\n"
                          "    ParserTransition *transitions;\n"
                          "    int transition_count;\n"
+                         "    int conflict;\n"
+                         "    ParserTransition *error;\n"
                          "    inline ParserTransition *begin() { return transitions; }\n"
                          "    inline ParserTransition *end() { return transitions + transition_count; }\n"
                          "};\n"
@@ -394,8 +409,8 @@ void generate_header(LALRGenerator &generator, const char *output, const char *p
                          "extern ParserState ParserStates[];\n"
                          "extern ReduceAction ParserActions[];\n"
                          "extern ParserTransition ParserTransitions[];\n"
-                         "\n"
-                         "template <class char_t = char, class char_traits = std::char_traits<char_t>>\n"
+                         "\n";
+    const char *parser = "template <class char_t = char, class char_traits = std::char_traits<char_t>>\n"
                          "struct ParserNode {\n"
                          "    ParserState *state;\n"
                          "    int symbol;\n"
@@ -716,8 +731,395 @@ void generate_header(LALRGenerator &generator, const char *output, const char *p
                          "        return true;\n"
                          "    }\n"
                          "};\n"
-                         "\n"
-                         "#endif //TINYLALR_PARSER_H";
+                         "\n";
+
+    const char *glr_parser = "template <class char_t = char, class char_traits = std::char_traits<char_t>>\n"
+                             "struct ParserTreeNode {\n"
+                             "    struct Link {\n"
+                             "        std::shared_ptr<ParserTreeNode> node;\n"
+                             "        std::shared_ptr<Link> next;\n"
+                             "        Link(const std::shared_ptr<ParserTreeNode> &node) : node(node) {}\n"
+                             "        Link(const std::shared_ptr<ParserTreeNode> &node, const std::shared_ptr<Link> &next) : node(node), next(next) {}\n"
+                             "        void to_nodes(std::vector<ParserTreeNode *> &nodes) {\n"
+                             "            nodes.clear();\n"
+                             "            auto start = next;\n"
+                             "            while (start) {\n"
+                             "                nodes.push_back(start->node.get());\n"
+                             "                start = start->next;\n"
+                             "            }\n"
+                             "        }\n"
+                             "    };\n"
+                             "    std::shared_ptr<ParserTreeNode> prev;\n"
+                             "    std::vector<std::shared_ptr<ParserTreeNode>> prevs;\n"
+                             "    ParserState *state = nullptr;\n"
+                             "    int symbol = 0;\n"
+                             "    int line = 0;\n"
+                             "    int column = 0;\n"
+                             "    std::basic_string<char_t, char_traits> lexeme;\n"
+                             "    json value;\n"
+                             "    int depth = 0;\n"
+                             "    int merge = 0;\n"
+                             "    bool error = false;\n"
+                             "    ParserTreeNode(ParserState *state) : state(state) {}\n"
+                             "    ParserTreeNode(const std::shared_ptr<ParserTreeNode> &prev, ParserState *state) : prev(prev), state(state) {}\n"
+                             "    void add_prev(const std::shared_ptr<ParserTreeNode> &previous) {\n"
+                             "        prevs.push_back(previous);\n"
+                             "    }\n"
+                             "    bool need_lr_reduce(ParserTransition *trans) {\n"
+                             "        return state->conflict == CONFLICT_NONE && trans->reduce_length <= depth;\n"
+                             "    }\n"
+                             "};\n"
+                             "template <class iter_t = const char *, class char_t = typename std::iterator_traits<iter_t>::value_type, class char_traits = std::char_traits<char_t>>\n"
+                             "class GLRParser {\n"
+                             "    using Lexer = ParserLexer<iter_t>;\n"
+                             "    using Node = ParserTreeNode<char_t, char_traits>;\n"
+                             "    using NodePtr = std::shared_ptr<Node>;\n"
+                             "    using Link = typename Node::Link;\n"
+                             "    using LinkPtr = std::shared_ptr<Link>;\n"
+                             "    struct ReduceNode {\n"
+                             "        LinkPtr link;\n"
+                             "        ParserTransition *trans;\n"
+                             "        ReduceNode(const LinkPtr &link, ParserTransition &trans) : link(link), trans(&trans) {}\n"
+                             "        inline bool operator<(const ReduceNode &rhs) const {\n"
+                             "            return trans->precedence < rhs.trans->precedence;\n"
+                             "        }\n"
+                             "    };\n"
+                             "    ParserState *parser_state = &ParserStates[0];\n"
+                             "    Lexer lexer_ = Lexer(&LexerStates[0], LexerWhitespaceSymbol);\n"
+                             "    bool position = false;\n"
+                             "    bool accepted = false;\n"
+                             "    std::map<ParserState *, NodePtr> frontier;\n"
+                             "    std::vector<NodePtr> shift_list;\n"
+                             "    std::vector<LinkPtr> link_list;\n"
+                             "    std::vector<Node *> action_nodes;\n"
+                             "    std::priority_queue<ReduceNode> reduce_list;\n"
+                             "public:\n"
+                             "    GLRParser() = default;\n"
+                             "    void set_position(bool sp) {\n"
+                             "        position = sp;\n"
+                             "    }\n"
+                             "    void reset(iter_t first, iter_t last = iter_t()) {\n"
+                             "        accepted = false;\n"
+                             "        frontier.clear();\n"
+                             "        lexer_.reset(first, last);\n"
+                             "    }\n"
+                             "    void parse() {\n"
+                             "        frontier.insert(std::pair(parser_state, NodePtr(new Node(parser_state))));\n"
+                             "        lexer_.advance();\n"
+                             "        do {\n"
+                             "            shift();\n"
+                             "            reduce();\n"
+                             "            if (frontier.size() == 0 || accepted) {\n"
+                             "                break;\n"
+                             "            }\n"
+                             "        } while (true);\n"
+                             "    }\n"
+                             "    bool accept() {\n"
+                             "        return accepted && frontier.size() > 0;\n"
+                             "    }\n"
+                             "    json &value() {\n"
+                             "        return std::get<1>(*frontier.begin())->value;\n"
+                             "    }\n"
+                             "    void reduce() {\n"
+                             "        for (auto &[state, node] : frontier) {\n"
+                             "            do_reduce(node);\n"
+                             "        }\n"
+                             "        while (!reduce_list.empty()) {\n"
+                             "            ReduceNode node = reduce_list.top();\n"
+                             "            reduce_list.pop();\n"
+                             "            do_goto(node);\n"
+                             "        }\n"
+                             "    }\n"
+                             "    void shift() {\n"
+                             "        shift_list.clear();\n"
+                             "        for (auto &[state, node] : frontier) {\n"
+                             "            int shift_count = 0;\n"
+                             "            for (auto &trans : *state) {\n"
+                             "                if (trans.type == TRANSITION_SHIFT && trans.symbol == lexer_.symbol()) {\n"
+                             "                    NodePtr shift_node = NodePtr(new Node(node, trans.state));\n"
+                             "                    shift_node->line = lexer_.line();\n"
+                             "                    shift_node->column = lexer_.column();\n"
+                             "                    shift_node->symbol = lexer_.symbol();\n"
+                             "                    shift_node->lexeme = lexer_.lexeme();\n"
+                             "                    shift_node->depth = node->depth + 1;\n"
+                             "                    shift_list.push_back(shift_node);\n"
+                             "                    shift_count++;\n"
+                             "                    break;\n"
+                             "                }\n"
+                             "            }\n"
+                             "            if (state->error && shift_count == 0 || node->error) {\n"
+                             "                do_error(node);\n"
+                             "            }\n"
+                             "        }\n"
+                             "        if (shift_list.size() == 0) {\n"
+                             "            handle_error();\n"
+                             "        }\n"
+                             "        frontier.clear();\n"
+                             "        for (auto &node : shift_list) {\n"
+                             "            if (frontier.count(node->state)) {\n"
+                             "                frontier[node->state]->add_prev(node->prev);\n"
+                             "                frontier[node->state]->depth = 0;\n"
+                             "            } else {\n"
+                             "                frontier.insert(std::pair(node->state, node));\n"
+                             "            }\n"
+                             "        }\n"
+                             "        lexer_.advance();\n"
+                             "    }\n"
+                             "    void do_goto(ReduceNode &node) {\n"
+                             "        node.link->to_nodes(action_nodes);\n"
+                             "        json value;\n"
+                             "        if (!action_nodes.empty() && action_nodes.back()->need_lr_reduce(node.trans)) {\n"
+                             "            value = handle_action(node.trans->actions, node.trans->action_count, action_nodes.data());\n"
+                             "            frontier.erase(action_nodes.back()->state); // del(node)\n"
+                             "        } else {\n"
+                             "            value = handle_action_copy(node.trans->actions, node.trans->action_count, action_nodes.data()); // dup(node)\n"
+                             "        }\n"
+                             "        int line = 0, column = 0;\n"
+                             "        if (node.trans->reduce_length > 0) {\n"
+                             "            line = action_nodes[0]->line;\n"
+                             "            column = action_nodes[0]->column;\n"
+                             "            if (position && value.is_object()) {\n"
+                             "                value[\"position\"] = {{\"line\",   line},\n"
+                             "                                     {\"column\", column}};\n"
+                             "            }\n"
+                             "        }\n"
+                             "        if (node.trans->accept()) {\n"
+                             "            auto start = NodePtr(new Node(parser_state));\n"
+                             "            start->value = std::move(value);\n"
+                             "            frontier.insert(std::pair(parser_state, start));\n"
+                             "            accepted = true;\n"
+                             "            return;\n"
+                             "        }\n"
+                             "        for (auto &goto_trans : *(node.link->node->state)) {\n"
+                             "            if (goto_trans.type == TRANSITION_SHIFT && goto_trans.symbol == node.trans->reduce_symbol) {\n"
+                             "                if (frontier.count(goto_trans.state)) {\n"
+                             "                    do_merge(frontier[goto_trans.state], value);\n"
+                             "                    frontier[goto_trans.state]->add_prev(node.link->node);\n"
+                             "                    frontier[goto_trans.state]->depth = 0;\n"
+                             "                } else {\n"
+                             "                    auto goto_node = NodePtr(new Node(node.link->node, goto_trans.state));\n"
+                             "                    goto_node->value = std::move(value);\n"
+                             "                    goto_node->line = line;\n"
+                             "                    goto_node->column = column;\n"
+                             "                    goto_node->symbol = node.trans->reduce_symbol;\n"
+                             "                    goto_node->lexeme = ParserSymbols[node.trans->reduce_symbol].text;\n"
+                             "                    goto_node->depth = node.link->node->depth + 1;\n"
+                             "                    do_reduce(goto_node);\n"
+                             "                    frontier.insert(std::pair(goto_node->state, goto_node));\n"
+                             "                }\n"
+                             "            }\n"
+                             "        }\n"
+                             "    }\n"
+                             "    void do_reduce(NodePtr &node) {\n"
+                             "        for (auto &trans : *(node->state)) {\n"
+                             "            if (trans.type == TRANSITION_REDUCE && trans.symbol == lexer_.symbol()) {\n"
+                             "                if (node->depth >= trans.reduce_length && node->state->conflict == CONFLICT_NONE) {\n"
+                             "                    do_lr_reduce(node, trans);\n"
+                             "                } else {\n"
+                             "                    do_glr_reduce(node, trans);\n"
+                             "                }\n"
+                             "            }\n"
+                             "        }\n"
+                             "    }\n"
+                             "    void do_lr_reduce(NodePtr node, ParserTransition &trans) {\n"
+                             "        auto link = LinkPtr(new Link(node));\n"
+                             "        action_nodes.resize(trans.reduce_length);\n"
+                             "        for (int i = trans.reduce_length - 1; i >= 0; --i) {\n"
+                             "            node = node->prev;\n"
+                             "            link = LinkPtr(new Link(node, link));\n"
+                             "        }\n"
+                             "        reduce_list.emplace(link, trans);\n"
+                             "    }\n"
+                             "    void do_glr_reduce(NodePtr node, ParserTransition &trans) {\n"
+                             "        link_list.clear();\n"
+                             "        link_list.push_back(LinkPtr(new Link(node)));\n"
+                             "        for (int i = trans.reduce_length - 1; i >= 0; --i) {\n"
+                             "            for (int j = 0, length = link_list.size(); j < length; ++j) {\n"
+                             "                for (auto &prev : link_list[j]->node->prevs) {\n"
+                             "                    link_list.push_back(LinkPtr(new Link(prev, link_list[j])));\n"
+                             "                }\n"
+                             "                link_list[j] = LinkPtr(new Link(link_list[j]->node->prev, link_list[j]));\n"
+                             "            }\n"
+                             "        }\n"
+                             "        for (auto &link : link_list) {\n"
+                             "            reduce_list.emplace(link, trans);\n"
+                             "        }\n"
+                             "    }\n"
+                             "    void do_merge(NodePtr node, json &value) {\n"
+                             "        if (node->merge) {\n"
+                             "            node->value[\"value\"].push_back(value);\n"
+                             "        } else {\n"
+                             "            json merge = {{\"kind\",  \"merge\"},\n"
+                             "                          {\"value\", json::array({std::move(node->value), value})}};\n"
+                             "            node->value = std::move(merge);\n"
+                             "        }\n"
+                             "        node->merge++;\n"
+                             "    }\n"
+                             "    void do_error(NodePtr node) {\n"
+                             "        // shift error\n"
+                             "        if (node->error) {\n"
+                             "            node->value.push_back({{\"lexeme\", lexer_.lexeme()},\n"
+                             "                                   {\"line\",   lexer_.line()},\n"
+                             "                                   {\"column\", lexer_.column()}});\n"
+                             "            shift_list.push_back(node);\n"
+                             "        } else {\n"
+                             "            NodePtr shift_node = NodePtr(new Node(node, node->state->error->state));\n"
+                             "            shift_node->symbol = 2;\n"
+                             "            shift_node->line = lexer_.line();\n"
+                             "            shift_node->column = lexer_.column();\n"
+                             "            shift_node->lexeme = \"error\";\n"
+                             "            shift_node->error = true;\n"
+                             "            shift_node->value = json::array();\n"
+                             "            shift_node->depth = node->depth + 1;\n"
+                             "            shift_node->value.push_back({{\"lexeme\", lexer_.lexeme()},\n"
+                             "                                         {\"line\",   lexer_.line()},\n"
+                             "                                         {\"column\", lexer_.column()}});\n"
+                             "            shift_list.push_back(shift_node);\n"
+                             "        }\n"
+                             "    }\n"
+                             "    inline json handle_action(ReduceAction *actions, int action_count, Node **nodes) {\n"
+                             "        if (action_count == 0) {\n"
+                             "            return std::move(nodes[0]->value);\n"
+                             "        }\n"
+                             "        json value;\n"
+                             "        for (int i = 0; i < action_count; ++i) {\n"
+                             "            auto &action = actions[i];\n"
+                             "            if (action.type == ACTION_TYPE_INIT && *action.desc == '$') {  // $n\n"
+                             "                value = std::move(nodes[action.value]->value);\n"
+                             "            }\n"
+                             "            if (action.type == ACTION_TYPE_INIT && *action.desc == '@') { // @n\n"
+                             "                value = nodes[action.value]->lexeme;\n"
+                             "            }\n"
+                             "            if (action.type == ACTION_TYPE_INIT && *action.desc == '#') { // #n\n"
+                             "                value = json::array({std::move(nodes[action.value]->value)});\n"
+                             "            }\n"
+                             "            if (action.type == ACTION_TYPE_INSERT) { // {$n|@n|#n}\n"
+                             "                if (!value.is_array()) {\n"
+                             "                    value = json::array({std::move(value)});\n"
+                             "                }\n"
+                             "                if (*action.desc == '@') {\n"
+                             "                    value.emplace_back(nodes[action.value]->lexeme);\n"
+                             "                } else {\n"
+                             "                    value.emplace_back(std::move(nodes[action.value]->value));\n"
+                             "                }\n"
+                             "            }\n"
+                             "            if (action.type == ACTION_TYPE_SET && *action.desc == '$') { // key:$n set value\n"
+                             "                value[std::string(action.field)] = std::move(nodes[action.value]->value);\n"
+                             "            }\n"
+                             "            if (action.type == ACTION_TYPE_SET && *action.desc == '@') { // key:@n set lexeme\n"
+                             "                value[std::string(action.field)] = nodes[action.value]->lexeme;\n"
+                             "            }\n"
+                             "            if (action.type == ACTION_TYPE_SET && *action.desc == '#') { // key:#n insert\n"
+                             "                value[std::string(action.field)].emplace_back(std::move(nodes[action.value]->value));\n"
+                             "            }\n"
+                             "            if (action.type == ACTION_TYPE_SET_STRING) {  // key:'string'\n"
+                             "                value[std::string(action.field)] = action.desc;\n"
+                             "            }\n"
+                             "            if (action.type == ACTION_TYPE_SET_BOOL) { // key:bool\n"
+                             "                value[std::string(action.field)] = json::boolean_t(action.value);\n"
+                             "            }\n"
+                             "            if (action.type == ACTION_TYPE_SET_INT) { // key:number\n"
+                             "                value[std::string(action.field)] = json::number_integer_t(action.value);\n"
+                             "            }\n"
+                             "            if (action.type == ACTION_TYPE_INSERT_STRING) {\n"
+                             "                if (value.empty()) {\n"
+                             "                    value = action.desc;\n"
+                             "                } else {\n"
+                             "                    if (value.is_array()) {\n"
+                             "                        value.emplace_back(action.desc);\n"
+                             "                    } else {\n"
+                             "                        value = json::array({std::move(value), action.desc});\n"
+                             "                    }\n"
+                             "                }\n"
+                             "            }\n"
+                             "            if (action.type == ACTION_TYPE_INSERT_BOOL) { // bool\n"
+                             "                value.emplace_back(json::boolean_t(action.value));\n"
+                             "            }\n"
+                             "            if (action.type == ACTION_TYPE_INSERT_INT) { // number\n"
+                             "                value.emplace_back(json::number_integer_t(action.value));\n"
+                             "            }\n"
+                             "        }\n"
+                             "        return std::move(value);\n"
+                             "    }\n"
+                             "    inline json handle_action_copy(ReduceAction *actions, int action_count, Node **nodes) {\n"
+                             "        if (action_count == 0) {\n"
+                             "            return {};\n"
+                             "        }\n"
+                             "        json value;\n"
+                             "        for (int i = 0; i < action_count; ++i) {\n"
+                             "            auto &action = actions[i];\n"
+                             "            if (action.type == ACTION_TYPE_INIT && *action.desc == '$') {  // $n\n"
+                             "                value = nodes[action.value]->value;\n"
+                             "            }\n"
+                             "            if (action.type == ACTION_TYPE_INIT && *action.desc == '@') { // @n\n"
+                             "                value = nodes[action.value]->lexeme;\n"
+                             "            }\n"
+                             "            if (action.type == ACTION_TYPE_INIT && *action.desc == '#') { // #n\n"
+                             "                value = json::array({nodes[action.value]->value});\n"
+                             "            }\n"
+                             "            if (action.type == ACTION_TYPE_INSERT) { // {$n|@n|#n}\n"
+                             "                if (!value.is_array()) {\n"
+                             "                    value = json::array({value});\n"
+                             "                }\n"
+                             "                if (*action.desc == '@') {\n"
+                             "                    value.emplace_back(nodes[action.value]->lexeme);\n"
+                             "                } else {\n"
+                             "                    value.emplace_back(nodes[action.value]->value);\n"
+                             "                }\n"
+                             "            }\n"
+                             "            if (action.type == ACTION_TYPE_SET && *action.desc == '$') { // key:$n set value\n"
+                             "                value[std::string(action.field)] = nodes[action.value]->value;\n"
+                             "            }\n"
+                             "            if (action.type == ACTION_TYPE_SET && *action.desc == '@') { // key:@n set lexeme\n"
+                             "                value[std::string(action.field)] = nodes[action.value]->lexeme;\n"
+                             "            }\n"
+                             "            if (action.type == ACTION_TYPE_SET && *action.desc == '#') { // key:#n insert\n"
+                             "                value[std::string(action.field)].emplace_back(nodes[action.value]->value);\n"
+                             "            }\n"
+                             "            if (action.type == ACTION_TYPE_SET_STRING) {  // key:'string'\n"
+                             "                value[std::string(action.field)] = action.desc;\n"
+                             "            }\n"
+                             "            if (action.type == ACTION_TYPE_SET_BOOL) { // key:bool\n"
+                             "                value[std::string(action.field)] = json::boolean_t(action.value);\n"
+                             "            }\n"
+                             "            if (action.type == ACTION_TYPE_SET_INT) { // key:number\n"
+                             "                value[std::string(action.field)] = json::number_integer_t(action.value);\n"
+                             "            }\n"
+                             "            if (action.type == ACTION_TYPE_INSERT_STRING) {\n"
+                             "                if (value.empty()) {\n"
+                             "                    value = action.desc;\n"
+                             "                } else {\n"
+                             "                    if (value.is_array()) {\n"
+                             "                        value.emplace_back(action.desc);\n"
+                             "                    } else {\n"
+                             "                        value = json::array({std::move(value), action.desc});\n"
+                             "                    }\n"
+                             "                }\n"
+                             "            }\n"
+                             "            if (action.type == ACTION_TYPE_INSERT_BOOL) { // bool\n"
+                             "                value.emplace_back(json::boolean_t(action.value));\n"
+                             "            }\n"
+                             "            if (action.type == ACTION_TYPE_INSERT_INT) { // number\n"
+                             "                value.emplace_back(json::number_integer_t(action.value));\n"
+                             "            }\n"
+                             "        }\n"
+                             "        return std::move(value);\n"
+                             "    }\n"
+                             "    inline void handle_error() {\n"
+                             "        std::cout << \"Unexpected Symbol '\" << lexer_.lexeme() << \"'\"\n"
+                             "                  << \" line:\" << lexer_.line() << \" column:\" << lexer_.column()\n"
+                             "                  << std::endl;\n"
+                             "        std::cout << \"Expect: \";\n"
+                             "        for (auto &[state, node] : frontier) {\n"
+                             "            for (auto &trans : *state) {\n"
+                             "                if (trans.type == TRANSITION_SHIFT && ParserSymbols[trans.symbol].type == SYMBOL_TYPE_NONTERMINAL) {\n"
+                             "                    std::cout << \"\\\"\" << ParserSymbols[trans.symbol].text << \"\\\"\" << \", \";\n"
+                             "                }\n"
+                             "            }\n"
+                             "        }\n"
+                             "        std::cout << std::endl;\n"
+                             "    }\n"
+                             "};\n";
     std::fstream fs;
     fs.open(output, std::ios::trunc | std::ios::out);
     fs << "//\n"
@@ -727,7 +1129,14 @@ void generate_header(LALRGenerator &generator, const char *output, const char *p
           "#ifndef TINYLALR_PARSER_H\n"
           "#define TINYLALR_PARSER_H\n"
           "#include \"json.hpp\"\n"
+          "#include <queue>\n"
+          "#include <map>\n"
           "#include <iostream>\n"
+          "#define CONFLICT_NONE 0\n"
+          "#define CONFLICT_SHIFT_REDUCE 1\n"
+          "#define CONFLICT_REDUCE_REDUCE 2\n"
+          "#define SYMBOL_TYPE_TERMINAL 0\n"
+          "#define SYMBOL_TYPE_NONTERMINAL 1\n"
           "#define TRANSITION_SHIFT 1\n"
           "#define TRANSITION_REDUCE 2\n"
           "#define ACTION_TYPE_INIT 0\n"
@@ -759,66 +1168,65 @@ void generate_header(LALRGenerator &generator, const char *output, const char *p
         fs << "\n";
     }
     fs << header;
+    fs << parser;
+    fs << glr_parser;
+    fs << "#endif //TINYLALR_PARSER_H";
     fs.close();
 }
-void generate(LALRGenerator &gen, const char *output, const char *prefix) {
+void generate(LALRGenerator &gen, Options &opts) {
     std::fstream fs;
-    fs.open(output, std::ios::trunc | std::ios::out);
+    fs.open(opts.output, std::ios::trunc | std::ios::out);
     fs << "//\n"
           "// Created by Alex's tiny lalr.\n"
           "//\n"
           "#include \"parser.h\"\n";
     fs << parser_emit_symbols(gen);
     fs << parser_emit_lexer(gen);
-    fs << parser_emit_action(gen, prefix);
+    fs << parser_emit_action(gen, opts.prefix);
     fs << parser_emit_states(gen);
     fs.close();
-    std::string file(output);
+    std::string file(opts.output);
     std::string str = file.substr(0, file.find_last_of('.')) + ".h";
-    //generate_header(gen, str.c_str(), prefix);
+    //generate_header(gen, str.c_str(), opts.prefix, opts.type);
 }
-void generate_grammar_file(const char *grammar_file, const char *output, const char *prefix) {
-    std::fstream input(grammar_file, std::ios::in);
+void generate_grammar_file(Options &opts) {
+    std::fstream input(opts.input, std::ios::in);
     LALRGrammarParser<StreamIter> lalr(input);
     input.close();
     LALRGenerator gen(lalr.grammar);
     gen.generate();
-    generate(gen, output, prefix);
+    generate(gen, opts);
 }
-void generate_grammar_string(const char *input, const char *output, const char *prefix) {
+void generate_grammar_string(const char *input, const char *output, const char *prefix, int type) {
     LALRGrammarParser<StringIter<char>> lalr(input);
     LALRGenerator gen(lalr.grammar);
     gen.generate();
-    generate(gen, output, prefix);
+    //generate(gen, output, prefix, type);
 }
 
 int main(int argc, char **argv) {
-    const char *input = "grammar.txt";
-    const char *output = "../parser.cpp";
-    const char *prefix = "TYPE_";
-    bool help = false;
-    bool enable_glr = false;
+    Options opts;
+    opts.input = "grammar.txt";
+    opts.output = "../parser.cpp";
+    opts.prefix = "TYPE_";
+    opts.type = 0;
     for (int index = 1; index < argc; index++) {
         if (strcmp(argv[index], "-o") == 0 || strcmp(argv[index], "--output") == 0) {
-            output = argv[index + 1];
+            opts.output = argv[index + 1];
             index += 2;
         } else if (strcmp(argv[index], "-h") == 0 || strcmp(argv[index], "--help") == 0) {
-            help = true;
+
             index += 1;
         } else if (strcmp(argv[index], "-p") == 0 || strcmp(argv[index], "--prefix") == 0) {
-            prefix = argv[index + 1];
+            opts.prefix = argv[index + 1];
             index += 2;
         } else if (strcmp(argv[index], "-g") == 0 || strcmp(argv[index], "--glr") == 0) {
-            enable_glr = true;
+            opts.type = 1;
             index += 1;
         } else {
-            input = argv[index];
+            opts.input = argv[index];
         }
     }
-    generate_grammar_file(input, output, prefix);
-
-    if (help) {
-        //std::cout << "Grammar Generator" << std::endl;
-    }
+    generate_grammar_file(opts);
     return 0;
 }

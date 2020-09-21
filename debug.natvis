@@ -62,7 +62,6 @@
         <Expand>
             <Item Name="[Prev]">prev</Item>
             <Item Name="[Prevs]">prevs</Item>
-<!--            <Item Name="[Links]">links</Item>-->
             <Item Name="[State]">state</Item>
             <Item Name="[Symbol]">ParserSymbols[symbol].text</Item>
             <Item Name="[Lexeme]">lexeme</Item>

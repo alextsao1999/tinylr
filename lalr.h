@@ -209,6 +209,7 @@ namespace alex {
     struct GrammarState {
         int index = 0;
         bool visited = false;
+        const GrammarTransition *error = nullptr;
         std::set<GrammarItem> items; // Item set
         std::multiset<GrammarTransition> transitions;
         ConflictType conflict = ConflictNone;
@@ -478,6 +479,7 @@ namespace alex {
     class LALRGenerator : SymbolVisitor {
     public:
         LALRGrammar &grammar;
+        int precedence = 0;
         std::vector<std::unique_ptr<GrammarState>> states;
         LALRGenerator(LALRGrammar &grammar) : grammar(grammar) {
             grammar.start->follow.insert(grammar.end);
@@ -527,7 +529,6 @@ namespace alex {
                 }
             }
         }
-        int precedence = 0;
         void check_nonterminal_precedence(Symbol *symbol) {
             if (symbol->is_nonterminal()) {
                 if (symbol->precedence == 0) {
@@ -650,7 +651,10 @@ namespace alex {
             for (auto &symbol : grammar.symbols) {
                 auto *goto_state = get_goto_state(state->items, symbol.get());
                 if (goto_state) {
-                    state->transitions.insert(GrammarTransition(goto_state, symbol.get()));
+                    auto iter = state->transitions.insert(GrammarTransition(goto_state, symbol.get()));
+                    if (symbol.get() == grammar.error) {
+                        state->error = &(*iter);
+                    }
                 }
             }
         }
