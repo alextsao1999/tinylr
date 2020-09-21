@@ -488,14 +488,10 @@ struct ParserTreeNode {
     struct Link {
         std::shared_ptr<ParserTreeNode> node;
         std::shared_ptr<Link> next;
-        int size = 1;
         Link(const std::shared_ptr<ParserTreeNode> &node) : node(node) {}
-        Link(const std::shared_ptr<ParserTreeNode> &node, const std::shared_ptr<Link> &next) : node(node), next(next) {
-            size = next->size + 1;
-        }
+        Link(const std::shared_ptr<ParserTreeNode> &node, const std::shared_ptr<Link> &next) : node(node), next(next) {}
         void to_nodes(std::vector<ParserTreeNode *> &nodes) {
             nodes.clear();
-            //nodes.push_back(node.get());
             auto start = next;
             while (start) {
                 nodes.push_back(start->node.get());

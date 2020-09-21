@@ -1187,7 +1187,7 @@ void generate(LALRGenerator &gen, Options &opts) {
     fs.close();
     std::string file(opts.output);
     std::string str = file.substr(0, file.find_last_of('.')) + ".h";
-    //generate_header(gen, str.c_str(), opts.prefix, opts.type);
+    generate_header(gen, str.c_str(), opts.prefix, opts.type);
 }
 void generate_grammar_file(Options &opts) {
     std::fstream input(opts.input, std::ios::in);
