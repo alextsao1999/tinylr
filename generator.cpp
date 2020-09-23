@@ -3,6 +3,7 @@
 //
 #include <sstream>
 #include <fstream>
+#include <algorithm>
 #include "lalr.h"
 #define ACTION_TYPE_INIT 0
 #define ACTION_TYPE_INSERT 1
@@ -13,7 +14,6 @@
 #define ACTION_TYPE_SET_INT 6
 #define ACTION_TYPE_SET_BOOL 7
 #define ACTION_TYPE_SET_STRING 8
-
 using namespace alex;
 struct Options {
     const char *input;
@@ -164,8 +164,7 @@ std::string lexer_emit_c(LALRGenerator &generator) {
     out << "}\n";
     return out.str();
 }
-std::string lexer_emit_state_machine(std::vector<std::unique_ptr<RegexState>> &states, const char *trans_name,
-                                     const char *states_name) {
+std::string lexer_emit_state_machine(std::vector<std::unique_ptr<RegexState>> &states, const char *trans_name, const char *states_name) {
     std::stringstream out;
     out << "LexerTransition " << trans_name << "[] = {\n";
     for (auto &state : states) {
@@ -196,9 +195,9 @@ std::string lexer_emit_state_machine(std::vector<std::unique_ptr<RegexState>> &s
     return out.str();
 
 }
-std::string change_type(const std::string &type) {
+std::string string_upper(const std::string &type) {
     std::string string(type);
-    strupr((char *) string.c_str());
+    std::transform(type.begin(), type.end(), string.begin(), std::toupper);
     return string;
 }
 std::string parser_emit_lexer(LALRGenerator &generator) {
@@ -298,7 +297,7 @@ std::string parser_emit_action(LALRGenerator &generator, const char *prefix) {
                 out << "\"" << value << "\", ";
                 if (symbol == Token_Identifier) {
                     out << (key.empty() ? ACTION_TYPE_INSERT_INT : ACTION_TYPE_SET_INT)
-                        << ", " << prefix << change_type(value);
+                        << ", " << prefix << string_upper(value);
                 } else {
                     out << (key.empty() ? ACTION_TYPE_INSERT_INT : ACTION_TYPE_SET_INT)
                         << ", " << std::atoi(value.data());
@@ -1153,7 +1152,7 @@ void generate_header(LALRGenerator &generator, const char *output, const char *p
         fs << "enum {\n";
         fs << "    " << prefix << "NONE" << ",\n";
         for (auto &type : generator.grammar.types) {
-            fs << "    " << prefix << change_type(type) << ",\n";
+            fs << "    " << prefix << string_upper(type) << ",\n";
         }
         fs << "};\n";
         //fs << "#define " << prefix << "LIST_COUNT " << generator.grammar.types.size() << "\n";
@@ -1162,7 +1161,7 @@ void generate_header(LALRGenerator &generator, const char *output, const char *p
             if (type == "true" || type == "false") {
 
             } else {
-                fs << " \\\n  v(" << prefix << change_type(type) << ", " << type << ")";
+                fs << " \\\n  v(" << prefix << string_upper(type) << ", " << type << ")";
             }
         }
         fs << "\n";
@@ -1203,7 +1202,6 @@ void generate_grammar_string(const char *input, const char *output, const char *
     gen.generate();
     //generate(gen, output, prefix, type);
 }
-
 int main(int argc, char **argv) {
     Options opts;
     opts.input = "grammar.txt";
