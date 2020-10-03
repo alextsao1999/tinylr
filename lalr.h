@@ -39,11 +39,12 @@ namespace alex {
     };
     struct Action {
         int index;
-        string_t base;
-        std::vector<std::tuple<string_t, string_t, int>> fields;
+        string_t type;
+        string_t init;
+        std::vector<std::tuple<string_t, string_t, int, int>> fields;
         Action() = default;
         inline size_t size() {
-            return fields.size() + (base.empty() ? 0 : 1);
+            return fields.size() + (init.empty() ? 0 : 1) + (type.empty() ? 0 : 1);
         }
     };
     struct Symbol {
@@ -221,6 +222,12 @@ namespace alex {
         }
     };
     struct LALRGrammar {
+        struct ASTInfo {
+            int index = 0;
+            std::map<string_t, int> fields;
+            std::map<string_t, int> fields_type;
+        };
+        std::map<string_t, ASTInfo> ast_info;
         std::vector<std::unique_ptr<Symbol>> symbols;
         std::vector<std::unique_ptr<Action>> actions;
         std::set<std::string> types;
@@ -246,6 +253,7 @@ namespace alex {
         Token_Desc,
         Token_Start,
         Token_Type,
+        Token_Bool,
         Token_WhiteSpace,
         Token_Semicolon,
     };
@@ -268,13 +276,14 @@ namespace alex {
             lexer.add_pattern("%left", Token_Left);
             lexer.add_pattern("%right", Token_Right);
             lexer.add_pattern("%start", Token_Start);
-            lexer.add_pattern("%type", Token_Type);
             lexer.add_pattern("%whitespace", Token_WhiteSpace);
             lexer.add_pattern("\\{", Token_LeftBrace);
             lexer.add_pattern("\\}", Token_RightBrace);
             lexer.add_pattern(",", Token_Comma);
             lexer.add_pattern("(\\-)?[0-9]+(\\.[0-9]+)?", Token_Number);
             lexer.add_pattern("($|@|#)+[0-9]+", Token_Desc);
+            lexer.add_pattern("@[a-zA-Z_][a-zA-Z_]*", Token_Type);
+            lexer.add_pattern("true|false", Token_Bool);
             lexer.add_pattern(":", Token_Colon);
             lexer.add_pattern(";", Token_Semicolon);
             lexer.generate_states();
@@ -392,16 +401,6 @@ namespace alex {
                     return false;
                 }
                 grammar.whitespace = symbol;
-            } else if (lexer.symbol() == Token_Type) {
-                lexer.advance();
-                do {
-                    if (lexer.symbol() == Token_Identifier) {
-                        grammar.types.insert(lexer.lexeme());
-                        lexer.advance();
-                    } else {
-                        break;
-                    }
-                } while (true);
             } else {
                 expect("identifier, associativity or start");
                 return false;
@@ -414,8 +413,7 @@ namespace alex {
                     active->push_production(new Production(active));
                     lexer.advance();
                     return true;
-                } else if (lexer.symbol() == Token_LeftBrace ||
-                           lexer.symbol() == Token_Desc) {
+                } else if (lexer.symbol() == Token_LeftBrace || lexer.symbol() == Token_Desc || lexer.symbol() == Token_Type) {
                     active->productions.back()->action = parse_action();
                     continue;
                 } else if (lexer.symbol() == Token_Semicolon) {
@@ -432,17 +430,24 @@ namespace alex {
         Action *parse_action() {
             Action *action = new Action();
             grammar.actions.emplace_back(action);
-            if (lexer.symbol() == Token_Desc) {
-                action->base = lexer.lexeme();
-                lexer.advance();
-                if (lexer.symbol() != Token_LeftBrace) {
-                    return action;
+            while (lexer.symbol() == Token_Type || lexer.symbol() == Token_Desc) {
+                if (lexer.symbol() == Token_Type) {
+                    action->type = lexer.lexeme();
+                    lexer.advance();
                 }
+                if (lexer.symbol() == Token_Desc) {
+                    action->init = lexer.lexeme();
+                    lexer.advance();
+                }
+            }
+            auto &info = grammar.ast_info[action->type];
+            if (lexer.symbol() != Token_LeftBrace) {
+                return action;
             }
             do {
                 lexer.advance();
                 if (lexer.symbol() != Token_Identifier) {
-                    action->fields.emplace_back(std::make_tuple("", lexer.lexeme(), lexer.symbol()));
+                    action->fields.emplace_back("", lexer.lexeme(), lexer.symbol(), -1);
                 } else {
                     auto field = lexer.lexeme();
                     lexer.advance();
@@ -451,11 +456,17 @@ namespace alex {
                     }
                     lexer.advance();
                     if (lexer.symbol() == Token_Identifier) {
-                        if (lexer.lexeme() != "true" && lexer.lexeme() != "false") {
-                            grammar.types.insert(lexer.lexeme());
-                        }
+                        grammar.types.insert(lexer.lexeme());
                     }
-                    action->fields.emplace_back(std::make_tuple(field, lexer.lexeme(), lexer.symbol()));
+                    int index = 0;
+                    if (info.fields.count(field)) {
+                        index = info.fields[field];
+                    } else {
+                        index = info.fields.size();
+                        info.fields[field] = index;
+                        info.fields_type[field] = lexer.symbol();
+                    }
+                    action->fields.emplace_back(field, lexer.lexeme(), lexer.symbol(), index);
                 }
                 lexer.advance();
             } while (lexer.symbol() == Token_Comma);
