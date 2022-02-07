@@ -29,6 +29,7 @@
         <DisplayString Condition="conflict == 0">{{ Index = {index}, Size = {transition_count} }}</DisplayString>
         <DisplayString Condition="conflict == 1">{{ Index = {index}, Size = {transition_count}, ShiftReduce }}</DisplayString>
         <DisplayString Condition="conflict == 2">{{ Index = {index}, Size = {transition_count}, ReduceReduce }}</DisplayString>
+<!--        <DisplayString>{{ Size = {transition_count} }}</DisplayString>-->
         <Expand>
             <ArrayItems>
                 <Size>transition_count</Size>
@@ -57,7 +58,7 @@
             <ExpandedItem>_Ptr</ExpandedItem>
         </Expand>
     </Type>
-    <Type Name="ParserTreeNode&lt;*&gt;">
+    <Type Name="ParserGraphNode&lt;*&gt;">
         <DisplayString>{{ Symbol = {ParserSymbols[symbol].text}, Lexeme = {lexeme}, State = {state} }}</DisplayString>
         <Expand>
             <Item Name="[Prev]">prev</Item>
@@ -79,4 +80,23 @@
             <ExpandedItem>second</ExpandedItem>
         </Expand>
     </Type>
+
+    <Type Name="alex::RegexTransition">
+<!--        <DisplayString>{{ [{char(begin)}({begin}), {char(end)}({begin})] }}</DisplayString>-->
+        <Expand>
+            <Item Name="[Begin]">((char) begin)</Item>
+            <Item Name="[End]">((char) (end - 1))</Item>
+            <Item Name="[State]">state</Item>
+        </Expand>
+    </Type>
+    <Type Name="alex::RegexRange">
+        <Expand>
+            <Item Name="[begin]">((char) begin)</Item>
+            <Item Name="[end]">((char) (end - 1))</Item>
+            <Item Name="[firstpos]">firstpos</Item>
+            <Item Name="[lastpos]">lastpos</Item>
+            <Item Name="[followpos]">followpos</Item>
+        </Expand>
+    </Type>
+
 </AutoVisualizer>

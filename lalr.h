@@ -28,15 +28,18 @@ namespace alex {
     struct Symbol;
     struct Nonterminal;
     struct Terminal;
+
     struct SymbolVisitor {
         virtual int visit(Terminal *) = 0;
         virtual int visit(Nonterminal *) = 0;
     };
+
     enum Associativity {
         AssoNone,
         AssoLeft,
         AssoRight,
     };
+
     struct Action {
         int index;
         string_t type;
@@ -47,6 +50,7 @@ namespace alex {
             return fields.size() + (init.empty() ? 0 : 1) + (type.empty() ? 0 : 1);
         }
     };
+
     struct Symbol {
         int index = 0;
         int line = 0;
@@ -65,6 +69,7 @@ namespace alex {
         virtual Terminal *terminal() { return nullptr; }
         virtual std::string to_str() { return "(null)"; }
     };
+
     struct Production {
         Symbol *lhs; // left hand side of the production
         std::vector<Symbol *> symbols;
@@ -103,6 +108,7 @@ namespace alex {
             return result;
         }
     };
+
     struct Nonterminal : Symbol {
         string_t identifier;
         std::vector<std::unique_ptr<Production>> productions;
@@ -126,6 +132,7 @@ namespace alex {
         }
         std::string to_str() override { return std::string(identifier); }
     };
+
     struct Terminal : Symbol {
         string_t pattern;
         Terminal(const string_t &pattern) : pattern(pattern) {}
@@ -143,6 +150,7 @@ namespace alex {
             return std::string(result);
         }
     };
+
     struct GrammarItem {
         Production *production;
         int position; // the dot position
@@ -179,6 +187,7 @@ namespace alex {
             return production == rhs.production && position == rhs.position;
         }
     };
+
     struct GrammarState;
     enum TransitionType {
         TransitionNone,
@@ -190,6 +199,7 @@ namespace alex {
         ConflictShiftReduce,
         ConflictReduceReduce,
     };
+
     struct GrammarTransition {
         GrammarState *state;
         Symbol *symbol;
@@ -221,6 +231,7 @@ namespace alex {
             return &(*iter);
         }
     };
+
     struct LALRGrammar {
         struct ASTInfo {
             int index = 0;
@@ -236,6 +247,7 @@ namespace alex {
         Nonterminal *error = nullptr;
         Symbol *whitespace = nullptr;
     };
+
     enum TokenType {
         Token_Null,
         Token_String,
@@ -257,6 +269,7 @@ namespace alex {
         Token_WhiteSpace,
         Token_Semicolon,
     };
+
     template <class iter_t = StringIter<>>
     class LALRGrammarParser {
     public:
@@ -301,6 +314,7 @@ namespace alex {
             lexer.reset(first, last);
             parse_rules();
         }
+
         bool match(TokenType token) {
             if (lexer.symbol() == token) {
                 lexer.advance();
@@ -315,6 +329,7 @@ namespace alex {
             std::cout << ">>> " << lexer.lexeme() << std::endl;
             std::cout << "    " << "^^^" << std::endl;
         }
+
         Nonterminal *get_nonterminal(string_t name) {
             if (nonterminal_table.count(name)) {
                 return nonterminal_table[name];
@@ -341,10 +356,11 @@ namespace alex {
                 return nt;
             }
         }
+
         void parse_rules() {
-            while (parse_expression()) {
-            }
+            while (parse_expression()) {}
         }
+
         bool parse_expression() {
             lexer.advance();
             if (lexer.symbol() == Token_Null) {
@@ -407,6 +423,7 @@ namespace alex {
             }
             return true;
         }
+
         bool parse_production() {
             do {
                 if (lexer.symbol() == Token_Pipe) {
@@ -427,6 +444,7 @@ namespace alex {
                 active->push_symbol(symbol);
             } while (true);
         }
+
         Action *parse_action() {
             Action *action = new Action();
             grammar.actions.emplace_back(action);
@@ -475,6 +493,7 @@ namespace alex {
             }
             return action;
         }
+
         Symbol *parse_symbol() {
             Symbol *symbol = nullptr;
             if (lexer.symbol() == Token_Identifier) {
@@ -487,6 +506,7 @@ namespace alex {
             return symbol;
         }
     };
+
     class LALRGenerator : SymbolVisitor {
     public:
         LALRGrammar &grammar;
@@ -762,6 +782,7 @@ namespace alex {
             symbol->follow.insert(follow.begin(), follow.end());
             return symbol->follow.size() - nSize;
         }
+
         int visit(Terminal *terminal) override {
             if (!terminal->first.empty()) {
                 return 0;

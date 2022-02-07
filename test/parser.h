@@ -64,6 +64,7 @@ struct ParserTransition {
     inline bool error() const { return symbol == 2 && type == TRANSITION_SHIFT; }
 };
 struct ParserState {
+    int index;
     ParserTransition *transitions;
     int transition_count;
     int conflict;
@@ -96,16 +97,12 @@ class ParserLexer {
     string_t lexeme_;
 private:
     inline LexerTransition *find_trans(LexerState *state, uchar_t chr) {
-        LexerTransition *dot_trans = nullptr;
         for (auto &trans : *state) {
-            if (trans.end == -1) {
-                dot_trans = &trans;
-            }
-            if (trans.begin <= chr && chr <= trans.end) {
+            if (trans.begin <= chr && chr < trans.end) {
                 return &trans;
             }
         }
-        return dot_trans;
+        return nullptr;
     }
     auto advance_symbol() {
         LexerState *state = lexer_state;
@@ -406,7 +403,7 @@ public:
         value_t value;
         for (int i = 0; i < action_count; ++i) {
             auto &action = actions[i];
-            if (action.opcode == ACTION_TYPE_CREATE) {
+            if (action.opcode == ACTION_TYPE_CREATE && !value) {
                 value = CreateASTById(action.value);
             }
             if (action.opcode == ACTION_TYPE_INIT) {  // $n

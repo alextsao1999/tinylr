@@ -24,6 +24,7 @@ struct Options {
     const char *input;
     const char *output;
     const char *prefix;
+    const char *ast_header;
     int type;
 };
 std::string escape(std::string_view view) {
@@ -359,7 +360,7 @@ std::string parser_emit_states(LALRGenerator &generator) {
     out << "ParserState ParserStates[] = {\n";
     int state_index = 0;
     for (auto &state : generator.get_states()) {
-        out << "    {"
+        out << "    {" << state_index++ << ", "
             << "&ParserTransitions[" << index << "], "
             << state->transitions.size() << ", "
             << state->conflict << ", ";
@@ -414,6 +415,7 @@ void generate_header(LALRGenerator &generator, const char *output, const char *p
                          "    inline bool error() const { return symbol == 2 && type == TRANSITION_SHIFT; }\n"
                          "};\n"
                          "struct ParserState {\n"
+                         "    int index;\n"
                          "    ParserTransition *transitions;\n"
                          "    int transition_count;\n"
                          "    int conflict;\n"
@@ -462,6 +464,15 @@ void generate_header(LALRGenerator &generator, const char *output, const char *p
                          "    string_t lexeme_;\n"
                          "private:\n"
                          "    inline LexerTransition *find_trans(LexerState *state, uchar_t chr) {\n"
+                         "        for (auto &trans : *state) {\n"
+                         "            if (trans.begin <= chr && chr < trans.end) {\n"
+                         "                return &trans;\n"
+                         "            }\n"
+                         "        }\n"
+                         "        return nullptr;\n"
+                         "    }\n"
+/*
+                         "    inline LexerTransition *find_trans(LexerState *state, uchar_t chr) {\n"
                          "        LexerTransition *dot_trans = nullptr;\n"
                          "        for (auto &trans : *state) {\n"
                          "            if (trans.end == -1) {\n"
@@ -473,6 +484,7 @@ void generate_header(LALRGenerator &generator, const char *output, const char *p
                          "        }\n"
                          "        return dot_trans;\n"
                          "    }\n"
+*/
                          "    auto advance_symbol() {\n"
                          "        LexerState *state = lexer_state;\n"
                          "        lexeme_.clear();\n"
@@ -1177,7 +1189,7 @@ void generate_header(LALRGenerator &generator, const char *output, const char *p
         }
         fs << "};\n";
         //fs << "#define " << prefix << "LIST_COUNT " << generator.grammar.types.size() << "\n";
-        fs << "#define " << prefix << "LIST(v) ";
+        /*fs << "#define " << prefix << "LIST(v) ";
         for (auto &type : generator.grammar.types) {
             if (type == "true" || type == "false") {
 
@@ -1185,7 +1197,7 @@ void generate_header(LALRGenerator &generator, const char *output, const char *p
                 fs << " \\\n  v(" << prefix << string_upper(type) << ", " << type << ")";
             }
         }
-        fs << "\n";
+        fs << "\n";*/
     }
     fs << header;
     fs << parser;
@@ -1270,6 +1282,7 @@ void generate_glr_header(LALRGenerator &generator, const char *output, const cha
           "    inline bool error() const { return symbol == 2 && type == TRANSITION_SHIFT; }\n"
           "};\n"
           "struct ParserState {\n"
+          "    int index;\n"
           "    ParserTransition *transitions;\n"
           "    int transition_count;\n"
           "    int conflict;\n"
@@ -1302,6 +1315,15 @@ void generate_glr_header(LALRGenerator &generator, const char *output, const cha
           "    string_t lexeme_;\n"
           "private:\n"
           "    inline LexerTransition *find_trans(LexerState *state, uchar_t chr) {\n"
+          "        for (auto &trans : *state) {\n"
+          "            if (trans.begin <= chr && chr < trans.end) {\n"
+          "                return &trans;\n"
+          "            }\n"
+          "        }\n"
+          "        return nullptr;\n"
+          "    }\n"
+/*
+          "    inline LexerTransition *find_trans(LexerState *state, uchar_t chr) {\n"
           "        LexerTransition *dot_trans = nullptr;\n"
           "        for (auto &trans : *state) {\n"
           "            if (trans.end == -1) {\n"
@@ -1313,6 +1335,7 @@ void generate_glr_header(LALRGenerator &generator, const char *output, const cha
           "        }\n"
           "        return dot_trans;\n"
           "    }\n"
+*/
           "    auto advance_symbol() {\n"
           "        LexerState *state = lexer_state;\n"
           "        lexeme_.clear();\n"
@@ -1612,7 +1635,7 @@ void generate_glr_header(LALRGenerator &generator, const char *output, const cha
           "        value_t value;\n"
           "        for (int i = 0; i < action_count; ++i) {\n"
           "            auto &action = actions[i];\n"
-          "            if (action.opcode == ACTION_TYPE_CREATE) {\n"
+          "            if (action.opcode == ACTION_TYPE_CREATE && !value) {\n"
           "                value = CreateASTById(action.value);\n"
           "            }\n"
           "            if (action.opcode == ACTION_TYPE_INIT) {  // $n\n"
@@ -1711,6 +1734,8 @@ void generate_ast_header(LALRGenerator &generator, const char *output) {
     fs << "\n";
     fs << "#define DeclareASTList(Type) class Type;\n"
           "ASTLIST(DeclareASTList);\n"
+          "template <class char_t, class char_traits>\n"
+          "class ASTLexeme;\n"
           "class ASTVisitor {\n"
           "public:\n"
           "#define VisitItem(Type) virtual void visit(Type *) = 0;\n"
@@ -1733,6 +1758,10 @@ void generate_ast_header(LALRGenerator &generator, const char *output) {
           "    virtual bool is_leaf() { return false; }\n"
           "    virtual bool is_list() { return false; }\n"
           "    virtual bool is_error() { return false; }\n"
+          "    template <class char_t = char, class char_traits = std::char_traits<char_t>>\n"
+          "    ASTLexeme<char_t, char_traits> *token() {\n"
+          "        return dynamic_cast<ASTLexeme<char_t, char_traits> *>(this);\n"
+          "    }\n"
           "    virtual void dump(std::ostream &os) {}\n"
           "    virtual void accept(ASTVisitor *) {}\n"
           "};\n"
@@ -1767,6 +1796,7 @@ void generate_ast_header(LALRGenerator &generator, const char *output) {
           "    ASTLexeme(const std::basic_string<char_t, char_traits> &lexeme) : lexeme_(lexeme) {}\n"
           "    ASTLexeme(int line, int column, const std::basic_string<char_t, char_traits> &lexeme) : ASTLeaf(line, column),\n"
           "                                                                                            lexeme_(lexeme) {}\n"
+          "    std::basic_string<char_t, char_traits> &lexeme() const { return lexeme_; }\n"
           "    void dump(std::ostream &os) override {\n"
           "        os << lexeme_;\n"
           "    }\n"
@@ -1807,7 +1837,9 @@ void generate_ast_header(LALRGenerator &generator, const char *output) {
           "    }\n"
           "    void accept(ASTVisitor *visitor) override {\n"
           "        for (auto &item : *this) {\n"
-          "            item->accept(visitor);\n"
+          "            if (item) {\n"
+          "                item->accept(visitor);\n"
+          "            }\n"
           "        }\n"
           "    }\n"
           "};\n"
@@ -1890,7 +1922,7 @@ void generate(LALRGenerator &gen, Options &opts) {
         generate_header(gen, str.c_str(), opts.prefix);
     } else {
         generate_glr_header(gen, str.c_str(), opts.prefix);
-        generate_ast_header(gen, "../ast.h");
+        generate_ast_header(gen, opts.ast_header);
     }
 }
 void generate_grammar_file(Options &opts) {
@@ -1907,10 +1939,12 @@ void generate_grammar_string(const char *input, const char *output, const char *
     gen.generate();
     //generate(gen, output, prefix, type);
 }
+
 int main(int argc, char **argv) {
     Options opts;
-    opts.input = "grammar.txt";
-    opts.output = "../parser.cpp";
+    opts.input = "../test/grammar.ast.y";
+    opts.output = "../test/parser.cpp";
+    opts.ast_header = "../test/ast.h";
     opts.prefix = "TYPE_";
     opts.type = TypeAst;
     for (int index = 1; index < argc; index++) {

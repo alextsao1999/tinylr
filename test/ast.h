@@ -21,12 +21,13 @@
     v(DotExpr) \
     v(Error) \
     v(ExprStatement) \
+    v(FieldDeclare) \
     v(Float) \
     v(FunctionDeclare) \
     v(HexExpr) \
     v(IfStatement) \
     v(Import) \
-    v(Invoke) \
+    v(InvokeExpr) \
     v(Long) \
     v(MethodDeclare) \
     v(NewExpr) \
@@ -38,6 +39,7 @@
     v(PropertyWriteDeclare) \
     v(ReturnStatement) \
     v(String) \
+    v(TernaryExpr) \
     v(TypeArgs) \
     v(TypeCastExpr) \
     v(TypeSpecifier) \
@@ -47,6 +49,8 @@
     v(WhileStatement)
 #define DeclareASTList(Type) class Type;
 ASTLIST(DeclareASTList);
+template <class char_t, class char_traits>
+class ASTLexeme;
 class ASTVisitor {
 public:
 #define VisitItem(Type) virtual void visit(Type *) = 0;
@@ -69,6 +73,10 @@ public:
     virtual bool is_leaf() { return false; }
     virtual bool is_list() { return false; }
     virtual bool is_error() { return false; }
+    template <class char_t = char, class char_traits = std::char_traits<char_t>>
+    ASTLexeme<char_t, char_traits> *token() {
+        return dynamic_cast<ASTLexeme<char_t, char_traits> *>(this);
+    }
     virtual void dump(std::ostream &os) {}
     virtual void accept(ASTVisitor *) {}
 };
@@ -103,6 +111,7 @@ public:
     ASTLexeme(const std::basic_string<char_t, char_traits> &lexeme) : lexeme_(lexeme) {}
     ASTLexeme(int line, int column, const std::basic_string<char_t, char_traits> &lexeme) : ASTLeaf(line, column),
                                                                                             lexeme_(lexeme) {}
+    std::basic_string<char_t, char_traits> &lexeme() const { return lexeme_; }
     void dump(std::ostream &os) override {
         os << lexeme_;
     }
@@ -143,7 +152,9 @@ public:
     }
     void accept(ASTVisitor *visitor) override {
         for (auto &item : *this) {
-            item->accept(visitor);
+            if (item) {
+                item->accept(visitor);
+            }
         }
     }
 };
@@ -341,9 +352,33 @@ public:
         os << "}";
     }
 };
+class FieldDeclare : public ASTList {
+public:
+    FieldDeclare() : ASTList(15, 5) {}
+    ASTNodePtr init() { return get(2); }
+    ASTNodePtr is_public() { return get(3); }
+    ASTNodePtr is_static() { return get(4); }
+    ASTNodePtr name() { return get(1); }
+    ASTNodePtr type() { return get(0); }
+    void accept(ASTVisitor *visitor) override { visitor->visit(this); }
+    void dump(std::ostream &os) override {
+        os << "FieldDeclare" << "{";
+        os << "init: ";
+        if (init()) init()->dump(os); else os << "null";
+        os << ", is_public: ";
+        if (is_public()) is_public()->dump(os); else os << "null";
+        os << ", is_static: ";
+        if (is_static()) is_static()->dump(os); else os << "null";
+        os << ", name: ";
+        if (name()) name()->dump(os); else os << "null";
+        os << ", type: ";
+        if (type()) type()->dump(os); else os << "null";
+        os << "}";
+    }
+};
 class Float : public ASTList {
 public:
-    Float() : ASTList(15, 1) {}
+    Float() : ASTList(16, 1) {}
     ASTNodePtr value() { return get(0); }
     void accept(ASTVisitor *visitor) override { visitor->visit(this); }
     void dump(std::ostream &os) override {
@@ -355,7 +390,7 @@ public:
 };
 class FunctionDeclare : public ASTList {
 public:
-    FunctionDeclare() : ASTList(16, 7) {}
+    FunctionDeclare() : ASTList(17, 7) {}
     ASTNodePtr block() { return get(3); }
     ASTNodePtr is_inline() { return get(6); }
     ASTNodePtr is_public() { return get(4); }
@@ -385,7 +420,7 @@ public:
 };
 class HexExpr : public ASTList {
 public:
-    HexExpr() : ASTList(17, 1) {}
+    HexExpr() : ASTList(18, 1) {}
     ASTNodePtr value() { return get(0); }
     void accept(ASTVisitor *visitor) override { visitor->visit(this); }
     void dump(std::ostream &os) override {
@@ -397,7 +432,7 @@ public:
 };
 class IfStatement : public ASTList {
 public:
-    IfStatement() : ASTList(18, 3) {}
+    IfStatement() : ASTList(19, 3) {}
     ASTNodePtr condition() { return get(0); }
     ASTNodePtr else_block() { return get(2); }
     ASTNodePtr then_block() { return get(1); }
@@ -415,17 +450,17 @@ public:
 };
 class Import : public ASTList {
 public:
-    Import() : ASTList(19, 0) {}
+    Import() : ASTList(20, 0) {}
     void accept(ASTVisitor *visitor) override { visitor->visit(this); }
 };
-class Invoke : public ASTList {
+class InvokeExpr : public ASTList {
 public:
-    Invoke() : ASTList(20, 2) {}
+    InvokeExpr() : ASTList(21, 2) {}
     ASTNodePtr args() { return get(1); }
     ASTNodePtr name() { return get(0); }
     void accept(ASTVisitor *visitor) override { visitor->visit(this); }
     void dump(std::ostream &os) override {
-        os << "Invoke" << "{";
+        os << "InvokeExpr" << "{";
         os << "args: ";
         if (args()) args()->dump(os); else os << "null";
         os << ", name: ";
@@ -435,7 +470,7 @@ public:
 };
 class Long : public ASTList {
 public:
-    Long() : ASTList(21, 1) {}
+    Long() : ASTList(22, 1) {}
     ASTNodePtr value() { return get(0); }
     void accept(ASTVisitor *visitor) override { visitor->visit(this); }
     void dump(std::ostream &os) override {
@@ -447,7 +482,7 @@ public:
 };
 class MethodDeclare : public ASTList {
 public:
-    MethodDeclare() : ASTList(22, 7) {}
+    MethodDeclare() : ASTList(23, 7) {}
     ASTNodePtr block() { return get(3); }
     ASTNodePtr is_inline() { return get(6); }
     ASTNodePtr is_public() { return get(4); }
@@ -477,7 +512,7 @@ public:
 };
 class NewExpr : public ASTList {
 public:
-    NewExpr() : ASTList(23, 2) {}
+    NewExpr() : ASTList(24, 2) {}
     ASTNodePtr args() { return get(1); }
     ASTNodePtr type() { return get(0); }
     void accept(ASTVisitor *visitor) override { visitor->visit(this); }
@@ -492,7 +527,7 @@ public:
 };
 class Number : public ASTList {
 public:
-    Number() : ASTList(24, 1) {}
+    Number() : ASTList(25, 1) {}
     ASTNodePtr value() { return get(0); }
     void accept(ASTVisitor *visitor) override { visitor->visit(this); }
     void dump(std::ostream &os) override {
@@ -504,7 +539,7 @@ public:
 };
 class OverloadOperator : public ASTList {
 public:
-    OverloadOperator() : ASTList(25, 4) {}
+    OverloadOperator() : ASTList(26, 4) {}
     ASTNodePtr block() { return get(2); }
     ASTNodePtr op() { return get(0); }
     ASTNodePtr params() { return get(1); }
@@ -525,7 +560,7 @@ public:
 };
 class Param : public ASTList {
 public:
-    Param() : ASTList(26, 2) {}
+    Param() : ASTList(27, 2) {}
     ASTNodePtr name() { return get(1); }
     ASTNodePtr type() { return get(0); }
     void accept(ASTVisitor *visitor) override { visitor->visit(this); }
@@ -540,13 +575,14 @@ public:
 };
 class Program : public ASTList {
 public:
-    Program() : ASTList(27, 0) {}
+    Program() : ASTList(28, 0) {}
     void accept(ASTVisitor *visitor) override { visitor->visit(this); }
 };
 class PropertyReadDeclare : public ASTList {
 public:
-    PropertyReadDeclare() : ASTList(28, 3) {}
+    PropertyReadDeclare() : ASTList(29, 4) {}
     ASTNodePtr block() { return get(2); }
+    ASTNodePtr is_public() { return get(3); }
     ASTNodePtr name() { return get(1); }
     ASTNodePtr type() { return get(0); }
     void accept(ASTVisitor *visitor) override { visitor->visit(this); }
@@ -554,6 +590,8 @@ public:
         os << "PropertyReadDeclare" << "{";
         os << "block: ";
         if (block()) block()->dump(os); else os << "null";
+        os << ", is_public: ";
+        if (is_public()) is_public()->dump(os); else os << "null";
         os << ", name: ";
         if (name()) name()->dump(os); else os << "null";
         os << ", type: ";
@@ -563,8 +601,9 @@ public:
 };
 class PropertyWriteDeclare : public ASTList {
 public:
-    PropertyWriteDeclare() : ASTList(29, 4) {}
+    PropertyWriteDeclare() : ASTList(30, 5) {}
     ASTNodePtr block() { return get(3); }
+    ASTNodePtr is_public() { return get(4); }
     ASTNodePtr name() { return get(1); }
     ASTNodePtr params() { return get(2); }
     ASTNodePtr type() { return get(0); }
@@ -573,6 +612,8 @@ public:
         os << "PropertyWriteDeclare" << "{";
         os << "block: ";
         if (block()) block()->dump(os); else os << "null";
+        os << ", is_public: ";
+        if (is_public()) is_public()->dump(os); else os << "null";
         os << ", name: ";
         if (name()) name()->dump(os); else os << "null";
         os << ", params: ";
@@ -584,7 +625,7 @@ public:
 };
 class ReturnStatement : public ASTList {
 public:
-    ReturnStatement() : ASTList(30, 1) {}
+    ReturnStatement() : ASTList(31, 1) {}
     ASTNodePtr value() { return get(0); }
     void accept(ASTVisitor *visitor) override { visitor->visit(this); }
     void dump(std::ostream &os) override {
@@ -596,7 +637,7 @@ public:
 };
 class String : public ASTList {
 public:
-    String() : ASTList(31, 1) {}
+    String() : ASTList(32, 1) {}
     ASTNodePtr value() { return get(0); }
     void accept(ASTVisitor *visitor) override { visitor->visit(this); }
     void dump(std::ostream &os) override {
@@ -606,14 +647,32 @@ public:
         os << "}";
     }
 };
+class TernaryExpr : public ASTList {
+public:
+    TernaryExpr() : ASTList(33, 3) {}
+    ASTNodePtr condition() { return get(0); }
+    ASTNodePtr left() { return get(1); }
+    ASTNodePtr right() { return get(2); }
+    void accept(ASTVisitor *visitor) override { visitor->visit(this); }
+    void dump(std::ostream &os) override {
+        os << "TernaryExpr" << "{";
+        os << "condition: ";
+        if (condition()) condition()->dump(os); else os << "null";
+        os << ", left: ";
+        if (left()) left()->dump(os); else os << "null";
+        os << ", right: ";
+        if (right()) right()->dump(os); else os << "null";
+        os << "}";
+    }
+};
 class TypeArgs : public ASTList {
 public:
-    TypeArgs() : ASTList(32, 0) {}
+    TypeArgs() : ASTList(34, 0) {}
     void accept(ASTVisitor *visitor) override { visitor->visit(this); }
 };
 class TypeCastExpr : public ASTList {
 public:
-    TypeCastExpr() : ASTList(33, 2) {}
+    TypeCastExpr() : ASTList(35, 2) {}
     ASTNodePtr cast_to() { return get(0); }
     ASTNodePtr value() { return get(1); }
     void accept(ASTVisitor *visitor) override { visitor->visit(this); }
@@ -628,7 +687,7 @@ public:
 };
 class TypeSpecifier : public ASTList {
 public:
-    TypeSpecifier() : ASTList(34, 2) {}
+    TypeSpecifier() : ASTList(36, 2) {}
     ASTNodePtr args() { return get(1); }
     ASTNodePtr type() { return get(0); }
     void accept(ASTVisitor *visitor) override { visitor->visit(this); }
@@ -643,7 +702,7 @@ public:
 };
 class Unsigned : public ASTList {
 public:
-    Unsigned() : ASTList(35, 1) {}
+    Unsigned() : ASTList(37, 1) {}
     ASTNodePtr value() { return get(0); }
     void accept(ASTVisitor *visitor) override { visitor->visit(this); }
     void dump(std::ostream &os) override {
@@ -655,7 +714,7 @@ public:
 };
 class VariableDeclare : public ASTList {
 public:
-    VariableDeclare() : ASTList(36, 3) {}
+    VariableDeclare() : ASTList(38, 3) {}
     ASTNodePtr init() { return get(2); }
     ASTNodePtr name() { return get(1); }
     ASTNodePtr type() { return get(0); }
@@ -673,7 +732,7 @@ public:
 };
 class VariableExpr : public ASTList {
 public:
-    VariableExpr() : ASTList(37, 1) {}
+    VariableExpr() : ASTList(39, 1) {}
     ASTNodePtr name() { return get(0); }
     void accept(ASTVisitor *visitor) override { visitor->visit(this); }
     void dump(std::ostream &os) override {
@@ -685,7 +744,7 @@ public:
 };
 class WhileStatement : public ASTList {
 public:
-    WhileStatement() : ASTList(38, 2) {}
+    WhileStatement() : ASTList(40, 2) {}
     ASTNodePtr body() { return get(1); }
     ASTNodePtr condition() { return get(0); }
     void accept(ASTVisitor *visitor) override { visitor->visit(this); }
@@ -729,52 +788,56 @@ inline ASTListPtr CreateASTById(int id) {
         case 14:
             return std::make_shared<ExprStatement>();
         case 15:
-            return std::make_shared<Float>();
+            return std::make_shared<FieldDeclare>();
         case 16:
-            return std::make_shared<FunctionDeclare>();
+            return std::make_shared<Float>();
         case 17:
-            return std::make_shared<HexExpr>();
+            return std::make_shared<FunctionDeclare>();
         case 18:
-            return std::make_shared<IfStatement>();
+            return std::make_shared<HexExpr>();
         case 19:
-            return std::make_shared<Import>();
+            return std::make_shared<IfStatement>();
         case 20:
-            return std::make_shared<Invoke>();
+            return std::make_shared<Import>();
         case 21:
-            return std::make_shared<Long>();
+            return std::make_shared<InvokeExpr>();
         case 22:
-            return std::make_shared<MethodDeclare>();
+            return std::make_shared<Long>();
         case 23:
-            return std::make_shared<NewExpr>();
+            return std::make_shared<MethodDeclare>();
         case 24:
-            return std::make_shared<Number>();
+            return std::make_shared<NewExpr>();
         case 25:
-            return std::make_shared<OverloadOperator>();
+            return std::make_shared<Number>();
         case 26:
-            return std::make_shared<Param>();
+            return std::make_shared<OverloadOperator>();
         case 27:
-            return std::make_shared<Program>();
+            return std::make_shared<Param>();
         case 28:
-            return std::make_shared<PropertyReadDeclare>();
+            return std::make_shared<Program>();
         case 29:
-            return std::make_shared<PropertyWriteDeclare>();
+            return std::make_shared<PropertyReadDeclare>();
         case 30:
-            return std::make_shared<ReturnStatement>();
+            return std::make_shared<PropertyWriteDeclare>();
         case 31:
-            return std::make_shared<String>();
+            return std::make_shared<ReturnStatement>();
         case 32:
-            return std::make_shared<TypeArgs>();
+            return std::make_shared<String>();
         case 33:
-            return std::make_shared<TypeCastExpr>();
+            return std::make_shared<TernaryExpr>();
         case 34:
-            return std::make_shared<TypeSpecifier>();
+            return std::make_shared<TypeArgs>();
         case 35:
-            return std::make_shared<Unsigned>();
+            return std::make_shared<TypeCastExpr>();
         case 36:
-            return std::make_shared<VariableDeclare>();
+            return std::make_shared<TypeSpecifier>();
         case 37:
-            return std::make_shared<VariableExpr>();
+            return std::make_shared<Unsigned>();
         case 38:
+            return std::make_shared<VariableDeclare>();
+        case 39:
+            return std::make_shared<VariableExpr>();
+        case 40:
             return std::make_shared<WhileStatement>();
     }
     return ASTListPtr();

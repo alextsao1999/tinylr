@@ -36,6 +36,7 @@ namespace alex {
             return !(*this == rhs);
         }
     };
+
     class FileStreamWrapper {
     private:
         std::fstream file;
@@ -53,6 +54,7 @@ namespace alex {
         }
         StreamIter end() { return StreamIter(); }
     };
+
     template<class char_t = char>
     class StringIter {
         const char_t *current = nullptr;
@@ -77,6 +79,7 @@ namespace alex {
             return !(*this == rhs);
         }
     };
+
     template <class iter_t = StringIter<>>
     class Lexer {
     public:

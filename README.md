@@ -344,3 +344,7 @@ int main() {
     ]
 }
 ```
+
+
+# Generator AST Directly from grammar
+
