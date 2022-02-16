@@ -1,7 +1,7 @@
 # tinylr
 a tiny lalr generator inspired by Charles Baker's lalr
 
-generate json format ast from grammar
+generate value_t format ast from grammar
 
 glr parser can handle the shift-reduce conflict and reduce-reduce conflict grammar easily
 
@@ -214,7 +214,7 @@ int main() {
     parser.reset(string);
     parser.parse();
     if (parser.accept()) {
-        json value = std::move(parser.value());
+        value_t value = std::move(parser.value());
         std::cout << value.dump(4);
     }
     return 0;
@@ -224,7 +224,7 @@ int main() {
 
 ## Output
 
-```json
+```value_t
 {
     "id": 28,
     "kind": "program",

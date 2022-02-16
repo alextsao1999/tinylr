@@ -274,12 +274,12 @@ namespace alex {
     class LALRGrammarParser {
     public:
         Lexer<iter_t> lexer;
-        LALRGrammar grammar;
+        LALRGrammar &grammar;
         Nonterminal *active = nullptr;
         std::map<string_t, Nonterminal *> nonterminal_table;
         std::map<string_t, Terminal *> terminal_table;
         int precedence = 0;
-        LALRGrammarParser(iter_t first, iter_t last = iter_t()) {
+        LALRGrammarParser(LALRGrammar &grammar) : grammar(grammar) {
             lexer.set_whitespace("([ \r\t\n]+)|(/\\*.*\\*/)|(//.*\n)");
             lexer.add_pattern("\"(\\\\.|.)*\"|'(\\\\.|.)*'", Token_String);
             lexer.add_pattern("[a-zA-Z_][a-zA-Z0-9_]*", Token_Identifier);
@@ -310,11 +310,18 @@ namespace alex {
             grammar.symbols.push_back(std::unique_ptr<Symbol>(grammar.end));
 
             grammar.error = get_nonterminal("error");
-
+        }
+        LALRGrammarParser(LALRGrammar &grammar, iter_t first, iter_t last = iter_t()) : LALRGrammarParser(grammar) {
             lexer.reset(first, last);
             parse_rules();
         }
 
+        void parse(iter_t first, iter_t last = iter_t()) {
+            lexer.reset(first, last);
+            parse_rules();
+        }
+
+    private:
         bool match(TokenType token) {
             if (lexer.symbol() == token) {
                 lexer.advance();
