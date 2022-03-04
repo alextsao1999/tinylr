@@ -215,7 +215,9 @@ inline void HandleReduceAction(ReduceAction &action, value_t &value, NodeGetter 
             }
             break;
         case ACTION_TYPE_INSERT:
-            if (!value.is_array()) {
+            if (value.is_null()) {
+                value = value_t::array();
+            } else if (!value.is_array()) {
                 value = Move ? value_t::array({std::move(value)}) : value_t::array({value});
             }
             if (*action.desc == '@') {
@@ -304,6 +306,7 @@ class LRParser {
 public:
     std::vector<Node> stack;
     LRParser() = default;
+    explicit LRParser(bool position) : position(position) {}
     void set_position(bool sp) {
         position = sp;
     }
@@ -415,15 +418,17 @@ public:
         if (action_count == 0) {
             return std::move(nodes->value);
         }
+
+        struct Getter {
+            Node *nodes;
+            Getter(Node *nodes) : nodes(nodes) {}
+            inline Node &operator[](size_t index) {
+                return nodes[index];
+            }
+        } getter{nodes};
+
         value_t value;
         for (int i = 0; i < action_count; ++i) {
-            struct Getter {
-                Node *nodes;
-                Getter(Node *nodes) : nodes(nodes) {}
-                inline Node &operator[](size_t index) {
-                    return nodes[index];
-                }
-            } getter{nodes};
             HandleReduceAction(actions[i], value, getter);
         }
         return std::move(value);
@@ -621,11 +626,11 @@ public:
         node.link->to_nodes(action_nodes);
         value_t value;
         if (!action_nodes.empty() && action_nodes.back()->need_lr_reduce(node.trans)) {
-            value = handle_action(node.trans->actions, node.trans->action_count, action_nodes.data());
+            value = handle_action<true>(node.trans->actions, node.trans->action_count);
             frontier.erase(action_nodes.back()->state);
             // del(node)
         } else {
-            value = handle_action_copy(node.trans->actions, node.trans->action_count, action_nodes.data());
+            value = handle_action<false>(node.trans->actions, node.trans->action_count);
             // dup(node)
         }
         int line = 0, column = 0;
@@ -732,37 +737,26 @@ public:
         }
     }
 
-    inline value_t handle_action(ReduceAction *actions, int action_count, Node **nodes) {
+    template<bool Move = false>
+    inline value_t handle_action(ReduceAction *actions, int action_count) {
         if (action_count == 0) {
-            return std::move(nodes[0]->value);
-        }
-        value_t value;
-        for (int i = 0; i < action_count; ++i) {
-            struct Getter {
-                Node **nodes;
-                Getter(Node **nodes) : nodes(nodes) {}
-                inline Node &operator[](size_t index) {
-                    return *nodes[index];
-                }
-            } getter{nodes};
-            HandleReduceAction<true>(actions[i], value, getter);
-        }
-        return std::move(value);
-    }
-    inline value_t handle_action_copy(ReduceAction *actions, int action_count, Node **nodes) {
-        if (action_count == 0) {
+            if (!action_nodes.empty() && Move) {
+                return action_nodes[0]->value; // default action -> $1
+            }
             return {};
         }
+
+        struct Getter {
+            Node **nodes;
+            Getter(Node **nodes) : nodes(nodes) {}
+            inline Node &operator[](size_t index) {
+                return *nodes[index];
+            }
+        } getter{action_nodes.data()};
+
         value_t value;
         for (int i = 0; i < action_count; ++i) {
-            struct Getter {
-                Node **nodes;
-                Getter(Node **nodes) : nodes(nodes) {}
-                inline Node &operator[](size_t index) {
-                    return *nodes[index];
-                }
-            } getter{nodes};
-            HandleReduceAction<false>(actions[i], value, getter);
+            HandleReduceAction<Move>(actions[i], value, getter);
         }
         return std::move(value);
     }
