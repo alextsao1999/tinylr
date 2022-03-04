@@ -1976,6 +1976,7 @@ public:
 
     }
 
+    /// generate lexer states and parser states
     void generate_state_machine(std::ostream &os) {
         os << parser_emit_symbols(*generator)
            << parser_emit_lexer_states(*generator)
@@ -1983,6 +1984,7 @@ public:
            << parser_emit_parser_states(*generator);
     }
 
+    /// generate common header(parser.h)
     void generate_common_header(std::ostream &os) {
         os << "//\n"
               "// Created by Alex\n"
@@ -2163,7 +2165,6 @@ public:
         os << "#endif //TINYLALR_PARSER_H";
 
     }
-
     void generate_json_parser(std::ostream &os) {
         os << "#include \"json.hpp\"\n";
 
@@ -2808,7 +2809,6 @@ public:
               "};\n";
 
     }
-
     void generate_ast_parser(std::ostream &os) {
         os << "#include \"" << get_file_name(options.ast_header) << "\"\n";
 
@@ -3139,6 +3139,7 @@ public:
               "};\n";
     }
 
+    /// generate ast.h
     void generate_ast_header(std::ostream &os) {
         os << "//\n"
               "// Created by Alex on 9/29/2020.\n"
@@ -3330,9 +3331,9 @@ public:
     }
 
 private:
-    LALRGrammar grammar;
-    std::unique_ptr<LALRGenerator> generator;
-    Options &options;
+    LALRGrammar grammar; ///> parsed grammar
+    std::unique_ptr<LALRGenerator> generator; ///> lalr state machine generator
+    Options &options; ///> cmdline options
 
 };
 
@@ -3359,8 +3360,8 @@ int main(int argc, char **argv) {
             opts.input = argv[index];
         }
     }
-    generate_grammar_file(opts);
-    //Generator generator(opts);
-    //generator.generate();
+    //generate_grammar_file(opts);
+    Generator generator(opts);
+    generator.generate();
     return 0;
 }

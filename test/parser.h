@@ -172,6 +172,7 @@ public:
 
 #include "json.hpp"
 using value_t = nlohmann::json;
+
 enum {
     TYPE_NONE,
     TYPE_ARGUMENTLIST,
@@ -194,7 +195,7 @@ enum {
     TYPE_EXPR_STATEMENT,
 };
 
-template<typename NodeGetter>
+template<bool Move = true, typename NodeGetter>
 inline void HandleReduceAction(ReduceAction &action, value_t &value, NodeGetter nodes) {
     switch (action.opcode) {
         default: LR_UNREACHED();
@@ -202,39 +203,39 @@ inline void HandleReduceAction(ReduceAction &action, value_t &value, NodeGetter 
             switch (*action.desc) {
                 default: LR_UNREACHED();
                 case '$':
-                    value = std::move(nodes[action.value].value);
+                    value = Move ? std::move(nodes[action.value].value) : nodes[action.value].value;
                     break;
                 case '@':
                     value = nodes[action.value].lexeme;
                     break;
                 case '#':
-                    value = value_t::array({std::move(nodes[action.value].value)});
+                    value = Move ? value_t::array({std::move(nodes[action.value].value)}) :
+                            value_t::array({nodes[action.value].value});
                     break;
             }
+            break;
         case ACTION_TYPE_INSERT:
             if (!value.is_array()) {
-                value = value_t::array({std::move(value)});
+                value = Move ? value_t::array({std::move(value)}) : value_t::array({value});
             }
             if (*action.desc == '@') {
                 value.emplace_back(nodes[action.value].lexeme);
             } else {
-                value.emplace_back(std::move(nodes[action.value].value));
+                value.emplace_back(Move ? std::move(nodes[action.value].value) : nodes[action.value].value);
             }
             break;
         case ACTION_TYPE_SET:
             switch (*action.desc) {
                 default: LR_UNREACHED();
                 case '$': // key:$n set value
-                    value[std::string(action.field)] = std::move(nodes[action.value].value);
+                    value[std::string(action.field)] = Move ? std::move(nodes[action.value].value) : nodes[action.value].value;
                     break;
                 case '@': // key:@n set lexeme
                     value[std::string(action.field)] = nodes[action.value].lexeme;
                     break;
                 case '#': // key:#n insert
                 {
-                    auto v = std::move(nodes[action.value].value);
-                    //value[std::string(action.field)].emplace_back(std::move(nodes[action.value].value));
-                    value[std::string(action.field)].push_back(std::move(v));
+                    value[std::string(action.field)].push_back(Move ? std::move(nodes[action.value].value) : nodes[action.value].value);
                 }
                     break;
             }
@@ -286,7 +287,7 @@ struct ParserNode {
 };
 
 template <class iter_t = const char *, class char_t = typename std::iterator_traits<iter_t>::value_type, class char_traits = std::char_traits<char_t>>
-class Parser {
+class LRParser {
     using Lexer = ParserLexer<iter_t>;
     using Node = ParserNode<char_t, char_traits>;
     ParserState *parser_state = &ParserStates[0];
@@ -302,7 +303,7 @@ class Parser {
     }
 public:
     std::vector<Node> stack;
-    Parser() = default;
+    LRParser() = default;
     void set_position(bool sp) {
         position = sp;
     }
@@ -461,13 +462,13 @@ public:
 };
 
 template <class char_t = char, class char_traits = std::char_traits<char_t>>
-struct ParserTreeNode {
+struct ParserGraphNode {
     struct Link {
-        std::shared_ptr<ParserTreeNode> node;
+        std::shared_ptr<ParserGraphNode> node;
         std::shared_ptr<Link> next;
-        Link(const std::shared_ptr<ParserTreeNode> &node) : node(node) {}
-        Link(const std::shared_ptr<ParserTreeNode> &node, const std::shared_ptr<Link> &next) : node(node), next(next) {}
-        void to_nodes(std::vector<ParserTreeNode *> &nodes) {
+        Link(const std::shared_ptr<ParserGraphNode> &node) : node(node) {}
+        Link(const std::shared_ptr<ParserGraphNode> &node, const std::shared_ptr<Link> &next) : node(node), next(next) {}
+        void to_nodes(std::vector<ParserGraphNode *> &nodes) {
             nodes.clear();
             auto start = next;
             while (start) {
@@ -476,8 +477,24 @@ struct ParserTreeNode {
             }
         }
     };
-    std::shared_ptr<ParserTreeNode> prev;
-    std::vector<std::shared_ptr<ParserTreeNode>> prevs;
+    static auto CreateLink(const std::shared_ptr<ParserGraphNode> &node) {
+        return std::make_shared<Link>(node);
+    }
+
+    static auto CreateLink(const std::shared_ptr<ParserGraphNode> &node, const std::shared_ptr<Link> &next) {
+        return std::make_shared<Link>(node, next);
+    }
+
+    static auto Create(ParserState *state) {
+        return std::make_shared<ParserGraphNode>(state);
+    }
+
+    static auto Create(const std::shared_ptr<ParserGraphNode> &prev, ParserState *state) {
+        return std::make_shared<ParserGraphNode>(prev, state);
+    }
+
+    std::shared_ptr<ParserGraphNode> prev;
+    std::vector<std::shared_ptr<ParserGraphNode>> prevs;
     ParserState *state = nullptr;
     int symbol = 0;
     int line = 0;
@@ -487,9 +504,9 @@ struct ParserTreeNode {
     int depth = 0;
     int merge = 0;
     bool error = false;
-    ParserTreeNode(ParserState *state) : state(state) {}
-    ParserTreeNode(const std::shared_ptr<ParserTreeNode> &prev, ParserState *state) : prev(prev), state(state) {}
-    void add_prev(const std::shared_ptr<ParserTreeNode> &previous) {
+    ParserGraphNode(ParserState *state) : state(state) {}
+    ParserGraphNode(const std::shared_ptr<ParserGraphNode> &prev, ParserState *state) : prev(prev), state(state) {}
+    void add_prev(const std::shared_ptr<ParserGraphNode> &previous) {
         prevs.push_back(previous);
     }
     bool need_lr_reduce(ParserTransition *trans) {
@@ -502,10 +519,9 @@ template <class iter_t = const char *,
         class char_traits = std::char_traits<char_t>>
 class GLRParser {
     using Lexer = ParserLexer<iter_t>;
-    using Node = ParserTreeNode<char_t, char_traits>;
+    using Node = ParserGraphNode<char_t, char_traits>;
     using NodePtr = std::shared_ptr<Node>;
-    using Link = typename Node::Link;
-    using LinkPtr = std::shared_ptr<Link>;
+    using LinkPtr = std::shared_ptr<typename Node::Link>;
     struct ReduceNode {
         LinkPtr link;
         ParserTransition *trans;
@@ -525,6 +541,10 @@ class GLRParser {
     std::priority_queue<ReduceNode> reduce_list;
 public:
     GLRParser() = default;
+    explicit GLRParser(bool position) : position(position) {}
+    explicit GLRParser(iter_t first, iter_t last = iter_t()) {
+        reset(first, last);
+    }
     void set_position(bool sp) {
         position = sp;
     }
@@ -550,6 +570,7 @@ public:
     value_t &value() {
         return std::get<1>(*frontier.begin())->value;
     }
+
     void reduce() {
         for (auto &[state, node] : frontier) {
             do_reduce(node);
@@ -595,6 +616,7 @@ public:
         }
         lexer_.advance();
     }
+
     void do_goto(ReduceNode &node) {
         node.link->to_nodes(action_nodes);
         value_t value;
@@ -616,7 +638,7 @@ public:
             }
         }
         if (node.trans->accept()) {
-            auto start = NodePtr(new Node(parser_state));
+            auto start = Node::Create(parser_state);
             start->value = std::move(value);
             frontier.insert(std::pair(parser_state, start));
             accepted = true;
@@ -629,7 +651,7 @@ public:
                     frontier[goto_trans.state]->add_prev(node.link->node);
                     frontier[goto_trans.state]->depth = 0;
                 } else {
-                    auto goto_node = NodePtr(new Node(node.link->node, goto_trans.state));
+                    auto goto_node = Node::Create(node.link->node, goto_trans.state);
                     goto_node->value = std::move(value);
                     goto_node->line = line;
                     goto_node->column = column;
@@ -654,23 +676,23 @@ public:
         }
     }
     void do_lr_reduce(NodePtr node, ParserTransition &trans) {
-        auto link = LinkPtr(new Link(node));
+        auto link = Node::CreateLink(node);
         action_nodes.resize(trans.reduce_length);
         for (int i = trans.reduce_length - 1; i >= 0; --i) {
             node = node->prev;
-            link = LinkPtr(new Link(node, link));
+            link = Node::CreateLink(node, link);
         }
         reduce_list.emplace(link, trans);
     }
     void do_glr_reduce(NodePtr node, ParserTransition &trans) {
         link_list.clear();
-        link_list.push_back(LinkPtr(new Link(node)));
+        link_list.push_back(Node::CreateLink(node));
         for (int i = trans.reduce_length - 1; i >= 0; --i) {
             for (int j = 0, length = link_list.size(); j < length; ++j) {
                 for (auto &prev : link_list[j]->node->prevs) {
-                    link_list.push_back(LinkPtr(new Link(prev, link_list[j])));
+                    link_list.push_back(Node::CreateLink(prev, link_list[j]));
                 }
-                link_list[j] = LinkPtr(new Link(link_list[j]->node->prev, link_list[j]));
+                link_list[j] = Node::CreateLink(link_list[j]->node->prev, link_list[j]);
             }
         }
         for (auto &link : link_list) {
@@ -695,7 +717,7 @@ public:
                                    {"column", lexer_.column()}});
             shift_list.push_back(node);
         } else {
-            NodePtr shift_node = NodePtr(new Node(node, node->state->error->state));
+            NodePtr shift_node = Node::Create(node, node->state->error->state);
             shift_node->symbol = 2;
             shift_node->line = lexer_.line();
             shift_node->column = lexer_.column();
@@ -709,6 +731,7 @@ public:
             shift_list.push_back(shift_node);
         }
     }
+
     inline value_t handle_action(ReduceAction *actions, int action_count, Node **nodes) {
         if (action_count == 0) {
             return std::move(nodes[0]->value);
@@ -722,7 +745,7 @@ public:
                     return *nodes[index];
                 }
             } getter{nodes};
-            HandleReduceAction(actions[i], value, getter);
+            HandleReduceAction<true>(actions[i], value, getter);
         }
         return std::move(value);
     }
@@ -732,61 +755,14 @@ public:
         }
         value_t value;
         for (int i = 0; i < action_count; ++i) {
-            auto &action = actions[i];
-            if (action.opcode == ACTION_TYPE_INIT && *action.desc == '$') {  // $n
-                value = nodes[action.value]->value;
-            }
-            if (action.opcode == ACTION_TYPE_INIT && *action.desc == '@') { // @n
-                value = nodes[action.value]->lexeme;
-            }
-            if (action.opcode == ACTION_TYPE_INIT && *action.desc == '#') { // #n
-                value = value_t::array({nodes[action.value]->value});
-            }
-            if (action.opcode == ACTION_TYPE_INSERT) { // {$n|@n|#n}
-                if (!value.is_array()) {
-                    value = value_t::array({value});
+            struct Getter {
+                Node **nodes;
+                Getter(Node **nodes) : nodes(nodes) {}
+                inline Node &operator[](size_t index) {
+                    return *nodes[index];
                 }
-                if (*action.desc == '@') {
-                    value.emplace_back(nodes[action.value]->lexeme);
-                } else {
-                    value.emplace_back(nodes[action.value]->value);
-                }
-            }
-            if (action.opcode == ACTION_TYPE_SET && *action.desc == '$') { // key:$n set value
-                value[std::string(action.field)] = nodes[action.value]->value;
-            }
-            if (action.opcode == ACTION_TYPE_SET && *action.desc == '@') { // key:@n set lexeme
-                value[std::string(action.field)] = nodes[action.value]->lexeme;
-            }
-            if (action.opcode == ACTION_TYPE_SET && *action.desc == '#') { // key:#n insert
-                value[std::string(action.field)].emplace_back(nodes[action.value]->value);
-            }
-            if (action.opcode == ACTION_TYPE_SET_STRING) {  // key:'string'
-                value[std::string(action.field)] = action.desc;
-            }
-            if (action.opcode == ACTION_TYPE_SET_BOOL) { // key:bool
-                value[std::string(action.field)] = value_t::boolean_t(action.value);
-            }
-            if (action.opcode == ACTION_TYPE_SET_INT) { // key:number
-                value[std::string(action.field)] = value_t::number_integer_t(action.value);
-            }
-            if (action.opcode == ACTION_TYPE_INSERT_STRING) {
-                if (value.empty()) {
-                    value = action.desc;
-                } else {
-                    if (value.is_array()) {
-                        value.emplace_back(action.desc);
-                    } else {
-                        value = value_t::array({std::move(value), action.desc});
-                    }
-                }
-            }
-            if (action.opcode == ACTION_TYPE_INSERT_BOOL) { // bool
-                value.emplace_back(value_t::boolean_t(action.value));
-            }
-            if (action.opcode == ACTION_TYPE_INSERT_INT) { // number
-                value.emplace_back(value_t::number_integer_t(action.value));
-            }
+            } getter{nodes};
+            HandleReduceAction<false>(actions[i], value, getter);
         }
         return std::move(value);
     }
@@ -804,5 +780,6 @@ public:
         }
         std::cout << std::endl;
     }
+
 };
 #endif //TINYLALR_PARSER_H

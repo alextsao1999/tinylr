@@ -7,8 +7,7 @@ int main() {
                          "int<int, value> main() {\n"
                          "  a < b > c;\n"
                          "}";
-    GLRParser<> parser;
-    parser.set_position(true);
+    GLRParser<> parser(true);
     parser.reset(string, string + strlen(string));
     parser.parse();
 
