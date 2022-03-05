@@ -8,6 +8,7 @@ glr parser can handle the shift-reduce conflict and reduce-reduce conflict gramm
 # Grammar Example
 [grammar file](test/grammar.json.y)
 
+## JSON Parser Example
 ```c++
 #include "parser.h"
 int main() {
@@ -29,7 +30,7 @@ int main() {
 
 ## Output
 
-```
+```json
 {
     "id": 12,
     "kind": "program",
