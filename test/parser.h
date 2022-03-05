@@ -8,6 +8,7 @@
 #include <iostream>
 #include <map>
 #include <queue>
+#include <cassert>
 
 #define LR_UNREACHED() assert(!"unreached here")
 
@@ -287,7 +288,6 @@ struct ParserNode {
             lexeme(lexeme),
             value(std::move(value)) {}
 };
-
 template <class iter_t = const char *, class char_t = typename std::iterator_traits<iter_t>::value_type, class char_traits = std::char_traits<char_t>>
 class LRParser {
     using Lexer = ParserLexer<iter_t>;
@@ -518,7 +518,6 @@ struct ParserGraphNode {
         return state->conflict == CONFLICT_NONE && trans->reduce_length <= depth;
     }
 };
-
 template <class iter_t = const char *,
         class char_t = typename std::iterator_traits<iter_t>::value_type,
         class char_traits = std::char_traits<char_t>>

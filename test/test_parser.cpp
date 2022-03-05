@@ -6,6 +6,7 @@ int main() {
     const char *string = "import aaa.bbb.ccc;\n"
                          "int<int, value> main() {\n"
                          "  a < b > c;\n"
+                         "  test(a, b, c);"
                          "}";
     GLRParser<> parser(true);
     parser.reset(string, string + strlen(string));
