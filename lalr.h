@@ -302,8 +302,8 @@ namespace alex {
                 return type_info[type_name];
             }
             auto &type = type_info[type_name];
-            type.index = types.size();
             types.insert(type_name);
+            type.index = types.size();
             return type;
         }
     };
@@ -359,7 +359,7 @@ namespace alex {
             lexer.add_pattern(",", Token_Comma);
             lexer.add_pattern("(\\-)?[0-9]+(\\.[0-9]+)?", Token_Number);
             lexer.add_pattern("($|@|#)+[0-9]+", Token_Desc);
-            lexer.add_pattern("@[a-zA-Z_][a-zA-Z_]*", Token_Type);
+            lexer.add_pattern("@[a-zA-Z_:][a-zA-Z_:&*]*", Token_Type);
             lexer.add_pattern("true|false", Token_Bool);
             lexer.add_pattern(":", Token_Colon);
             lexer.add_pattern(";", Token_Semicolon);
@@ -549,73 +549,6 @@ namespace alex {
             action->type = active->type;
             parser_object(action);
             return action;
-
-            // Parse the action type or initializer
-            do {
-                if (lexer.symbol() == Token_Type){
-                    action->type = lexer.lexeme();
-                    lexer.advance();
-                } else if (lexer.symbol() == Token_Desc) {
-                    action->init = lexer.lexeme();
-                    lexer.advance();
-                } else {
-                    break;
-                }
-            } while (true);
-
-            if (lexer.symbol() != Token_LeftBrace) {
-                return action;
-            }
-
-            // Get the action type info
-            TypeInfo &typeinfo = grammar.type_info[action->type];
-            do {
-                lexer.advance();
-                if (lexer.symbol() != Token_Identifier) {
-                    action->fields.emplace_back("", lexer.lexeme(), lexer.symbol(), -1);
-                } else {
-                    auto field = lexer.lexeme();
-                    lexer.advance(); // eat field name
-                    if (lexer.symbol() != Token_Colon)
-                        expect(":");
-                    lexer.advance(); // eat ':'
-                    switch (lexer.symbol()) {
-                        default: report("unexpected token"); break;
-                        case Token_Identifier:
-                            grammar.types.insert(lexer.lexeme());
-                            break;
-                        case Token_Type:
-                        case Token_Desc: {
-                            std::string field_type;
-                            if (lexer.symbol() == Token_Type) {
-                                // drop first character '@'
-                                field_type = lexer.lexeme().substr(1);
-                                grammar.types.insert(field_type);
-                                lexer.advance();
-                            }
-                            auto desc = lexer.lexeme();
-                            if (field_type.empty()) {
-                                if (auto *cur_production = active->get_active_production()) {
-                                    // TODO: take field type account for ast
-                                    int operate_index = std::stoi(desc.substr(1));
-                                    if (auto *nt = cur_production->get_symbol(operate_index)->nonterminal()) {
-                                        field_type = nt->type;
-                                    }
-                                }
-                            }
-                            typeinfo.set_field_type(field, field_type);
-                            int field_index = typeinfo.get_field_index(field);
-                            action->fields.emplace_back(field, desc, lexer.symbol(), field_index);
-                            break;
-                        }
-                    }
-                }
-                lexer.advance();
-            } while (lexer.symbol() == Token_Comma);
-            if (!match(Token_RightBrace)) {
-                expect("}");
-            }
-            return action;
         }
 
         int parser_object(Action *action) {
@@ -700,8 +633,14 @@ namespace alex {
                         if (lexer.symbol() == Token_RightBrace) {
                             break;
                         }
-                        assert(lexer.symbol() == Token_Identifier); // identify: value
                         auto field = lexer.lexeme();
+                        if (lexer.symbol() == Token_Type) {
+                            // @type field: xxx
+                            lexer.advance();
+                            typeinfo.set_field_type(lexer.lexeme(), field.substr(1));
+                            field = lexer.lexeme();
+                        }
+                        assert(lexer.symbol() == Token_Identifier);
                         lexer.advance(); // eat field name
                         if (!match(Token_Colon)) {
                             expect(":");
@@ -715,7 +654,7 @@ namespace alex {
                                 typeinfo.set_field_type(field, "int");
                                 break;
                             case Token_String:
-                                typeinfo.set_field_type(field, "string");
+                                typeinfo.set_field_type(field, "std::string");
                                 break;
                             case Token_Bool:
                                 typeinfo.set_field_type(field, "bool");

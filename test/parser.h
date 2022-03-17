@@ -201,13 +201,551 @@ public:
 #include "json.hpp"
 using value_t = nlohmann::json;
 
+enum {
+    TYPE_NONE = -1,
+    TYPE_ACCESSEXPR = 33,
+    TYPE_ARROWEXPR = 28,
+    TYPE_ASSIGNEXPR = 27,
+    TYPE_BIN = 41,
+    TYPE_BINARYEXPR = 25,
+    TYPE_BLOCKSTMT = 14,
+    TYPE_BREAKSTMT = 17,
+    TYPE_CASESTMT = 22,
+    TYPE_CASTMETHODDECLARE = 7,
+    TYPE_CHAR = 42,
+    TYPE_CLASSDECLARE = 4,
+    TYPE_CONTINUESTMT = 16,
+    TYPE_DOWHILESTMT = 20,
+    TYPE_DOTEXPR = 32,
+    TYPE_ERROR = 3,
+    TYPE_EXPRSTMT = 13,
+    TYPE_FIELDDECLARE = 5,
+    TYPE_FLOAT = 37,
+    TYPE_FUNCTIONDECLARE = 11,
+    TYPE_HEX = 40,
+    TYPE_IFSTMT = 18,
+    TYPE_IMPORT = 2,
+    TYPE_INVOKEEXPR = 34,
+    TYPE_LONG = 39,
+    TYPE_METHODDECLARE = 6,
+    TYPE_NEWEXPR = 30,
+    TYPE_NUMBER = 36,
+    TYPE_OVERLOADOPERATOR = 10,
+    TYPE_PARAM = 12,
+    TYPE_PROGRAM = 1,
+    TYPE_READPROPERTYDECLARE = 8,
+    TYPE_RETURNSTMT = 15,
+    TYPE_STRING = 35,
+    TYPE_SWITCHSTMT = 21,
+    TYPE_TERNARYEXPR = 26,
+    TYPE_TYPECAST = 29,
+    TYPE_TYPESPECIFIER = 24,
+    TYPE_UNSIGNED = 38,
+    TYPE_VARIABLEDECLARE = 23,
+    TYPE_VARIABLEEXPR = 31,
+    TYPE_WHILESTMT = 19,
+    TYPE_WRITEPROPERTYDECLARE = 9,
+};
+class JsonASTBase {
+protected:
+    value_t &value_;
+public:
+    JsonASTBase(value_t &value) : value_(value) {}
+    int getID() { return value_["id"].get<int>(); }
+    std::string getKind() { return value_["name"].get<std::string>(); }
+    operator value_t &() { return value_; }
+};
+class AccessExpr : public JsonASTBase {
+public:
+    using JsonASTBase::JsonASTBase;
+    value_t &getField() { return value_["field"]; }
+    value_t &getLhs() { return value_["lhs"]; }
+};
+class ArrowExpr : public JsonASTBase {
+public:
+    using JsonASTBase::JsonASTBase;
+    value_t &getBlock() { return value_["block"]; }
+    value_t &getParams() { return value_["params"]; }
+};
+class AssignExpr : public JsonASTBase {
+public:
+    using JsonASTBase::JsonASTBase;
+    value_t &getLeft() { return value_["left"]; }
+    value_t &getRight() { return value_["right"]; }
+};
+class Bin : public JsonASTBase {
+public:
+    using JsonASTBase::JsonASTBase;
+    value_t &getValue() { return value_["value"]; }
+};
+class BinaryExpr : public JsonASTBase {
+public:
+    using JsonASTBase::JsonASTBase;
+    value_t &getLeft() { return value_["left"]; }
+    value_t &getOp() { return value_["op"]; }
+    value_t &getRight() { return value_["right"]; }
+};
+class BlockStmt : public JsonASTBase {
+public:
+    using JsonASTBase::JsonASTBase;
+    value_t &getValue() { return value_["value"]; }
+};
+class BreakStmt : public JsonASTBase {
+public:
+    using JsonASTBase::JsonASTBase;
+};
+class CaseStmt : public JsonASTBase {
+public:
+    using JsonASTBase::JsonASTBase;
+    value_t &getBody() { return value_["body"]; }
+    value_t &getBranches() { return value_["branches"]; }
+    value_t &getCondition() { return value_["condition"]; }
+};
+class CastMethodDeclare : public JsonASTBase {
+public:
+    using JsonASTBase::JsonASTBase;
+    value_t &getBlock() { return value_["block"]; }
+    value_t &getType() { return value_["type"]; }
+};
+class Char : public JsonASTBase {
+public:
+    using JsonASTBase::JsonASTBase;
+    value_t &getValue() { return value_["value"]; }
+};
+class ClassDeclare : public JsonASTBase {
+public:
+    using JsonASTBase::JsonASTBase;
+    value_t &getBody() { return value_["body"]; }
+    std::string getName() { return value_["name"].get<std::string>(); }
+    value_t &getSuper() { return value_["super"]; }
+    value_t &getTemplate() { return value_["template"]; }
+};
+class ContinueStmt : public JsonASTBase {
+public:
+    using JsonASTBase::JsonASTBase;
+};
+class DoWhileStmt : public JsonASTBase {
+public:
+    using JsonASTBase::JsonASTBase;
+    value_t &getBody() { return value_["body"]; }
+    value_t &getCondition() { return value_["condition"]; }
+};
+class DotExpr : public JsonASTBase {
+public:
+    using JsonASTBase::JsonASTBase;
+    value_t &getField() { return value_["field"]; }
+    value_t &getLhs() { return value_["lhs"]; }
+};
+class Error : public JsonASTBase {
+public:
+    using JsonASTBase::JsonASTBase;
+    std::string getContent() { return value_["content"].get<std::string>(); }
+    value_t &getValue() { return value_["value"]; }
+};
+class ExprStmt : public JsonASTBase {
+public:
+    using JsonASTBase::JsonASTBase;
+    value_t &getValue() { return value_["value"]; }
+};
+class FieldDeclare : public JsonASTBase {
+public:
+    using JsonASTBase::JsonASTBase;
+};
+class Float : public JsonASTBase {
+public:
+    using JsonASTBase::JsonASTBase;
+    value_t &getValue() { return value_["value"]; }
+};
+class FunctionDeclare : public JsonASTBase {
+public:
+    using JsonASTBase::JsonASTBase;
+    value_t &getBlock() { return value_["block"]; }
+    bool getInline() { return value_["inline"].get<bool>(); }
+    value_t &getName() { return value_["name"]; }
+    value_t &getParams() { return value_["params"]; }
+    bool getPublic() { return value_["public"].get<bool>(); }
+    bool getStatic() { return value_["static"].get<bool>(); }
+    value_t &getType() { return value_["type"]; }
+};
+class Hex : public JsonASTBase {
+public:
+    using JsonASTBase::JsonASTBase;
+    value_t &getValue() { return value_["value"]; }
+};
+class IfStmt : public JsonASTBase {
+public:
+    using JsonASTBase::JsonASTBase;
+    value_t &getCondition() { return value_["condition"]; }
+    value_t &getElse() { return value_["else"]; }
+    value_t &getThen() { return value_["then"]; }
+};
+class Import : public JsonASTBase {
+public:
+    using JsonASTBase::JsonASTBase;
+    value_t &getItems() { return value_["items"]; }
+};
+class InvokeExpr : public JsonASTBase {
+public:
+    using JsonASTBase::JsonASTBase;
+    value_t &getArgs() { return value_["args"]; }
+    value_t &getName() { return value_["name"]; }
+};
+class Long : public JsonASTBase {
+public:
+    using JsonASTBase::JsonASTBase;
+    value_t &getValue() { return value_["value"]; }
+};
+class MethodDeclare : public JsonASTBase {
+public:
+    using JsonASTBase::JsonASTBase;
+};
+class NewExpr : public JsonASTBase {
+public:
+    using JsonASTBase::JsonASTBase;
+    value_t &getArgs() { return value_["args"]; }
+    value_t &getType() { return value_["type"]; }
+};
+class Number : public JsonASTBase {
+public:
+    using JsonASTBase::JsonASTBase;
+    value_t &getValue() { return value_["value"]; }
+};
+class OverloadOperator : public JsonASTBase {
+public:
+    using JsonASTBase::JsonASTBase;
+    value_t &getBlock() { return value_["block"]; }
+    value_t &getOp() { return value_["op"]; }
+    value_t &getParams() { return value_["params"]; }
+    value_t &getType() { return value_["type"]; }
+};
+class Param : public JsonASTBase {
+public:
+    using JsonASTBase::JsonASTBase;
+    value_t &getName() { return value_["name"]; }
+    value_t &getType() { return value_["type"]; }
+};
+class Program : public JsonASTBase {
+public:
+    using JsonASTBase::JsonASTBase;
+    value_t &getValue() { return value_["value"]; }
+};
+class ReadPropertyDeclare : public JsonASTBase {
+public:
+    using JsonASTBase::JsonASTBase;
+    value_t &getBlock() { return value_["block"]; }
+    value_t &getName() { return value_["name"]; }
+    bool getPublic() { return value_["public"].get<bool>(); }
+    value_t &getType() { return value_["type"]; }
+};
+class ReturnStmt : public JsonASTBase {
+public:
+    using JsonASTBase::JsonASTBase;
+    value_t &getValue() { return value_["value"]; }
+};
+class String : public JsonASTBase {
+public:
+    using JsonASTBase::JsonASTBase;
+    value_t &getValue() { return value_["value"]; }
+};
+class SwitchStmt : public JsonASTBase {
+public:
+    using JsonASTBase::JsonASTBase;
+    value_t &getCases() { return value_["cases"]; }
+    value_t &getCondition() { return value_["condition"]; }
+    value_t &getDefault() { return value_["default"]; }
+};
+class TernaryExpr : public JsonASTBase {
+public:
+    using JsonASTBase::JsonASTBase;
+    value_t &getCondition() { return value_["condition"]; }
+    value_t &getLeft() { return value_["left"]; }
+    value_t &getRight() { return value_["right"]; }
+};
+class TypeCast : public JsonASTBase {
+public:
+    using JsonASTBase::JsonASTBase;
+    value_t &getCast_to() { return value_["cast_to"]; }
+    value_t &getValue() { return value_["value"]; }
+};
+class TypeSpecifier : public JsonASTBase {
+public:
+    using JsonASTBase::JsonASTBase;
+    value_t &getArgs() { return value_["args"]; }
+    value_t &getType() { return value_["type"]; }
+};
+class Unsigned : public JsonASTBase {
+public:
+    using JsonASTBase::JsonASTBase;
+    bool getUnsigned() { return value_["unsigned"].get<bool>(); }
+    value_t &getValue() { return value_["value"]; }
+};
+class VariableDeclare : public JsonASTBase {
+public:
+    using JsonASTBase::JsonASTBase;
+    value_t &getInit() { return value_["init"]; }
+    value_t &getName() { return value_["name"]; }
+    bool getPublic() { return value_["public"].get<bool>(); }
+    bool getStatic() { return value_["static"].get<bool>(); }
+    value_t &getType() { return value_["type"]; }
+};
+class VariableExpr : public JsonASTBase {
+public:
+    using JsonASTBase::JsonASTBase;
+    value_t &getName() { return value_["name"]; }
+};
+class WhileStmt : public JsonASTBase {
+public:
+    using JsonASTBase::JsonASTBase;
+    value_t &getBody() { return value_["body"]; }
+    value_t &getCondition() { return value_["condition"]; }
+};
+class WritePropertyDeclare : public JsonASTBase {
+public:
+    using JsonASTBase::JsonASTBase;
+    value_t &getBlock() { return value_["block"]; }
+    value_t &getName() { return value_["name"]; }
+    value_t &getParams() { return value_["params"]; }
+    bool getPublic() { return value_["public"].get<bool>(); }
+    value_t &getType() { return value_["type"]; }
+};
+template<typename SubTy, typename RetTy = void>
+struct Visitor {
+    RetTy visit(value_t &value) {
+        if (value.is_null()) {
+            return RetTy();
+        }
+        if (value.is_array()) {
+            for (auto &val : value) {
+                visit(val);
+            }
+            return RetTy();
+        }
+        switch (value["id"].get<int>()) {
+            case TYPE_ACCESSEXPR:
+                return static_cast<SubTy *>(this)->visitAccessExpr(value);
+            case TYPE_ARROWEXPR:
+                return static_cast<SubTy *>(this)->visitArrowExpr(value);
+            case TYPE_ASSIGNEXPR:
+                return static_cast<SubTy *>(this)->visitAssignExpr(value);
+            case TYPE_BIN:
+                return static_cast<SubTy *>(this)->visitBin(value);
+            case TYPE_BINARYEXPR:
+                return static_cast<SubTy *>(this)->visitBinaryExpr(value);
+            case TYPE_BLOCKSTMT:
+                return static_cast<SubTy *>(this)->visitBlockStmt(value);
+            case TYPE_BREAKSTMT:
+                return static_cast<SubTy *>(this)->visitBreakStmt(value);
+            case TYPE_CASESTMT:
+                return static_cast<SubTy *>(this)->visitCaseStmt(value);
+            case TYPE_CASTMETHODDECLARE:
+                return static_cast<SubTy *>(this)->visitCastMethodDeclare(value);
+            case TYPE_CHAR:
+                return static_cast<SubTy *>(this)->visitChar(value);
+            case TYPE_CLASSDECLARE:
+                return static_cast<SubTy *>(this)->visitClassDeclare(value);
+            case TYPE_CONTINUESTMT:
+                return static_cast<SubTy *>(this)->visitContinueStmt(value);
+            case TYPE_DOWHILESTMT:
+                return static_cast<SubTy *>(this)->visitDoWhileStmt(value);
+            case TYPE_DOTEXPR:
+                return static_cast<SubTy *>(this)->visitDotExpr(value);
+            case TYPE_ERROR:
+                return static_cast<SubTy *>(this)->visitError(value);
+            case TYPE_EXPRSTMT:
+                return static_cast<SubTy *>(this)->visitExprStmt(value);
+            case TYPE_FIELDDECLARE:
+                return static_cast<SubTy *>(this)->visitFieldDeclare(value);
+            case TYPE_FLOAT:
+                return static_cast<SubTy *>(this)->visitFloat(value);
+            case TYPE_FUNCTIONDECLARE:
+                return static_cast<SubTy *>(this)->visitFunctionDeclare(value);
+            case TYPE_HEX:
+                return static_cast<SubTy *>(this)->visitHex(value);
+            case TYPE_IFSTMT:
+                return static_cast<SubTy *>(this)->visitIfStmt(value);
+            case TYPE_IMPORT:
+                return static_cast<SubTy *>(this)->visitImport(value);
+            case TYPE_INVOKEEXPR:
+                return static_cast<SubTy *>(this)->visitInvokeExpr(value);
+            case TYPE_LONG:
+                return static_cast<SubTy *>(this)->visitLong(value);
+            case TYPE_METHODDECLARE:
+                return static_cast<SubTy *>(this)->visitMethodDeclare(value);
+            case TYPE_NEWEXPR:
+                return static_cast<SubTy *>(this)->visitNewExpr(value);
+            case TYPE_NUMBER:
+                return static_cast<SubTy *>(this)->visitNumber(value);
+            case TYPE_OVERLOADOPERATOR:
+                return static_cast<SubTy *>(this)->visitOverloadOperator(value);
+            case TYPE_PARAM:
+                return static_cast<SubTy *>(this)->visitParam(value);
+            case TYPE_PROGRAM:
+                return static_cast<SubTy *>(this)->visitProgram(value);
+            case TYPE_READPROPERTYDECLARE:
+                return static_cast<SubTy *>(this)->visitReadPropertyDeclare(value);
+            case TYPE_RETURNSTMT:
+                return static_cast<SubTy *>(this)->visitReturnStmt(value);
+            case TYPE_STRING:
+                return static_cast<SubTy *>(this)->visitString(value);
+            case TYPE_SWITCHSTMT:
+                return static_cast<SubTy *>(this)->visitSwitchStmt(value);
+            case TYPE_TERNARYEXPR:
+                return static_cast<SubTy *>(this)->visitTernaryExpr(value);
+            case TYPE_TYPECAST:
+                return static_cast<SubTy *>(this)->visitTypeCast(value);
+            case TYPE_TYPESPECIFIER:
+                return static_cast<SubTy *>(this)->visitTypeSpecifier(value);
+            case TYPE_UNSIGNED:
+                return static_cast<SubTy *>(this)->visitUnsigned(value);
+            case TYPE_VARIABLEDECLARE:
+                return static_cast<SubTy *>(this)->visitVariableDeclare(value);
+            case TYPE_VARIABLEEXPR:
+                return static_cast<SubTy *>(this)->visitVariableExpr(value);
+            case TYPE_WHILESTMT:
+                return static_cast<SubTy *>(this)->visitWhileStmt(value);
+            case TYPE_WRITEPROPERTYDECLARE:
+                return static_cast<SubTy *>(this)->visitWritePropertyDeclare(value);
+            default:
+                LR_UNREACHED();
+        }
+    }
+    RetTy visitAccessExpr(AccessExpr value) {
+        return RetTy();
+    }
+    RetTy visitArrowExpr(ArrowExpr value) {
+        return RetTy();
+    }
+    RetTy visitAssignExpr(AssignExpr value) {
+        return RetTy();
+    }
+    RetTy visitBin(Bin value) {
+        return RetTy();
+    }
+    RetTy visitBinaryExpr(BinaryExpr value) {
+        return RetTy();
+    }
+    RetTy visitBlockStmt(BlockStmt value) {
+        return RetTy();
+    }
+    RetTy visitBreakStmt(BreakStmt value) {
+        return RetTy();
+    }
+    RetTy visitCaseStmt(CaseStmt value) {
+        return RetTy();
+    }
+    RetTy visitCastMethodDeclare(CastMethodDeclare value) {
+        return RetTy();
+    }
+    RetTy visitChar(Char value) {
+        return RetTy();
+    }
+    RetTy visitClassDeclare(ClassDeclare value) {
+        return RetTy();
+    }
+    RetTy visitContinueStmt(ContinueStmt value) {
+        return RetTy();
+    }
+    RetTy visitDoWhileStmt(DoWhileStmt value) {
+        return RetTy();
+    }
+    RetTy visitDotExpr(DotExpr value) {
+        return RetTy();
+    }
+    RetTy visitError(Error value) {
+        return RetTy();
+    }
+    RetTy visitExprStmt(ExprStmt value) {
+        return RetTy();
+    }
+    RetTy visitFieldDeclare(FieldDeclare value) {
+        return RetTy();
+    }
+    RetTy visitFloat(Float value) {
+        return RetTy();
+    }
+    RetTy visitFunctionDeclare(FunctionDeclare value) {
+        return RetTy();
+    }
+    RetTy visitHex(Hex value) {
+        return RetTy();
+    }
+    RetTy visitIfStmt(IfStmt value) {
+        return RetTy();
+    }
+    RetTy visitImport(Import value) {
+        return RetTy();
+    }
+    RetTy visitInvokeExpr(InvokeExpr value) {
+        return RetTy();
+    }
+    RetTy visitLong(Long value) {
+        return RetTy();
+    }
+    RetTy visitMethodDeclare(MethodDeclare value) {
+        return RetTy();
+    }
+    RetTy visitNewExpr(NewExpr value) {
+        return RetTy();
+    }
+    RetTy visitNumber(Number value) {
+        return RetTy();
+    }
+    RetTy visitOverloadOperator(OverloadOperator value) {
+        return RetTy();
+    }
+    RetTy visitParam(Param value) {
+        return RetTy();
+    }
+    RetTy visitProgram(Program value) {
+        return RetTy();
+    }
+    RetTy visitReadPropertyDeclare(ReadPropertyDeclare value) {
+        return RetTy();
+    }
+    RetTy visitReturnStmt(ReturnStmt value) {
+        return RetTy();
+    }
+    RetTy visitString(String value) {
+        return RetTy();
+    }
+    RetTy visitSwitchStmt(SwitchStmt value) {
+        return RetTy();
+    }
+    RetTy visitTernaryExpr(TernaryExpr value) {
+        return RetTy();
+    }
+    RetTy visitTypeCast(TypeCast value) {
+        return RetTy();
+    }
+    RetTy visitTypeSpecifier(TypeSpecifier value) {
+        return RetTy();
+    }
+    RetTy visitUnsigned(Unsigned value) {
+        return RetTy();
+    }
+    RetTy visitVariableDeclare(VariableDeclare value) {
+        return RetTy();
+    }
+    RetTy visitVariableExpr(VariableExpr value) {
+        return RetTy();
+    }
+    RetTy visitWhileStmt(WhileStmt value) {
+        return RetTy();
+    }
+    RetTy visitWritePropertyDeclare(WritePropertyDeclare value) {
+        return RetTy();
+    }
+};
+
 template<bool Move = true, typename NodeGetter>
 inline void HandleReduceAction(ReduceAction &action, std::vector<value_t> &arr, NodeGetter nodes) {
     switch (action.opcode) {
         default:
             LR_UNREACHED();
         case OpcodeCreateObj:
-            arr.push_back(value_t::object_t());
+            arr.push_back(value_t::object_t(
+                    {{"kind", value_t::string_t(action.value)},
+                     {"id", value_t::number_integer_t(action.index)}}));
             break;
         case OpcodeCreateArr:
             arr.push_back(value_t::array_t());
@@ -706,11 +1244,6 @@ public:
                 return *nodes[index];
             }
         } getter{node.paths.data()};
-
-        std::vector<ReduceAction *> reductions;
-        for (int i = 0; i < action_count; ++i) {
-            reductions.push_back(&actions[i]);
-        }
 
         for (int i = 0; i < action_count; ++i) {
             HandleReduceAction<Move>(actions[i], values, getter);
