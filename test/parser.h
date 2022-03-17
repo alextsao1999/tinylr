@@ -1017,18 +1017,15 @@ private:
     using Node = ParserGraphNode;
     using NodePtr = std::shared_ptr<Node>;
     struct ReduceNode {
-        std::vector<Node *> paths;
+        std::vector<NodePtr> paths;
         ParserTransition *trans;
         NodePtr prev;
-        ReduceNode(const std::vector<Node *> &paths, ParserTransition *trans, const NodePtr &prev) : paths(paths.rbegin(), paths.rend()),
+        ReduceNode(const std::vector<NodePtr> &paths, ParserTransition *trans, const NodePtr &prev) : paths(paths.rbegin(), paths.rend()),
                                                                                 trans(trans), prev(prev) {}
         inline bool operator<(const ReduceNode &rhs) const {
             return trans->precedence < rhs.trans->precedence;
         }
-        inline Node *get_first() const {
-            return paths[0];
-        }
-        inline Node *get_last() const {
+        inline NodePtr get_last() const {
             return paths.back();
         }
     };
@@ -1139,12 +1136,14 @@ public:
         }
         if (node.trans->reduce_length) {
             // merge the locations
-            loc = std::accumulate(node.paths.begin(), node.paths.end(), Location(), [](Location &loc, Node *node) {
+            loc = std::accumulate(node.paths.begin(), node.paths.end(), Location(), [](Location &loc, NodePtr &node) {
                 return loc.merge(node->location);
             });
             if (position && value.is_object()) {
-                value["position"] = {{"line",   loc.line_start},
-                                     {"column", loc.column_start}};
+                value["position"] = {{"lineStart",   loc.line_start},
+                                     {"columnStart", loc.column_start},
+                                     {"lineEnd",     loc.line_end},
+                                     {"columnEnd",   loc.column_end}};
             }
         }
         if (node.trans->accept()) {
@@ -1182,13 +1181,13 @@ public:
     }
 
     void enumerate_path(const NodePtr &start, ParserTransition *trans) {
-        std::vector<Node *> path;
+        std::vector<NodePtr> path;
         std::function<void(const NodePtr &, unsigned)> DFS = [&](auto &node, unsigned length) {
             if (length-- == 0) {
                 reduce_list.push(ReduceNode(path, trans, node));
                 return;
             }
-            path.push_back(node.get());
+            path.push_back(node);
             for (auto &prev: node->prevs) {
                 DFS(prev, length);
             }
@@ -1208,24 +1207,22 @@ public:
     }
     void do_error(NodePtr node) {
         // shift error
-        if (node->error) {
-            node->value.push_back({{"lexeme", lexer_.lexeme()},
-                                   {"line",   lexer_.line_start()},
-                                   {"column", lexer_.column_start()}});
-            shift_list.push_back(node);
-        } else {
-            NodePtr shift_node = Node::Create(node->state->error->state, node);
-            shift_node->symbol = 2;
-            shift_node->value = value_t::array();
-            shift_node->lexeme = "error";
-            shift_node->location = lexer_.location();
-            shift_node->error = true;
-            shift_node->depth = node->depth + 1;
-            shift_node->value.push_back({{"lexeme", lexer_.lexeme()},
-                                         {"line",   lexer_.line_start()},
-                                         {"column", lexer_.column_start()}});
-            shift_list.push_back(shift_node);
+        if (!node->error) {
+            // there is error state, goto error state
+            node = Node::Create(node->state->error->state, node);
+            node->symbol = 2;
+            node->value = value_t::array();
+            node->lexeme = "error";
+            node->location = lexer_.location();
+            node->error = true;
+            node->depth = node->depth + 1;
         }
+        node->value.push_back({{"lexeme",      lexer_.lexeme()},
+                               {"lineStart",   lexer_.line_start()},
+                               {"columnStart", lexer_.column_start()},
+                               {"lineEnd",     lexer_.line_end()},
+                               {"columnEnd",   lexer_.column_end()}});
+        shift_list.push_back(node);
     }
 
     template<bool Move = false>
@@ -1238,8 +1235,8 @@ public:
         }
 
         struct Getter {
-            Node **nodes;
-            Getter(Node **nodes) : nodes(nodes) {}
+            NodePtr *nodes;
+            Getter(NodePtr *nodes) : nodes(nodes) {}
             inline Node &operator[](size_t index) {
                 return *nodes[index];
             }

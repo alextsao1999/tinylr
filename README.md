@@ -1,4 +1,6 @@
 # tinylr
+[简体中文](README-zh.md)
+
 a tiny lalr generator inspired by Charles Baker's lalr
 
 generate json format ast from grammar

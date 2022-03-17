@@ -40,9 +40,9 @@ int main() {
 
     if (parser.accept()) {
         auto value = parser.value();
-        MyVisitor visitor;
-        visitor.visit(value);
-        //std::cout << value.dump(4) << std::endl;
+        //MyVisitor visitor;
+        //visitor.visit(value);
+        std::cout << value.dump(4) << std::endl;
     }
     return 0;
 }
