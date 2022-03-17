@@ -2,7 +2,7 @@
 // Created by Alex on 2022/2/2.
 //
 #include "lexer.h"
-
+#include <vector>
 int main() {
     using namespace alex;
 

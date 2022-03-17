@@ -7,6 +7,7 @@
 #include <unordered_map>
 #include <set>
 #include <iostream>
+#include <cassert>
 #include "lexer.h"
 
 namespace alex {
@@ -40,14 +41,40 @@ namespace alex {
         AssoRight,
     };
 
+    enum ActionOpcode {
+        OpcodeCreateObj,
+        OpcodeCreateArr,
+        OpcodePushValue, /// $n
+        OpcodePushInt, /// int
+        OpcodePushStr, /// str
+        OpcodePushBool, /// bool
+        OpcodePushToken, /// token
+        OpcodePopSet,
+        OpcodePopInsertArr,
+        OpcodePopInsertObj,
+    };
     struct Action {
         int index;
         string_t type;
         string_t init;
+        struct Instruction {
+            ActionOpcode opcode;
+            int value_int;
+            string_t value_str;
+        };
         std::vector<std::tuple<string_t, string_t, int, int>> fields;
+        std::vector<Instruction> insts;
         Action() = default;
+        inline void add_inst(ActionOpcode opcode, int value_int = 0, const std::string &value_str = "") {
+            insts.emplace_back(Instruction{opcode, value_int, value_str});
+        }
+        inline void add_inst(ActionOpcode opcode, const std::string &value_str) {
+            insts.emplace_back(Instruction{opcode, 0, value_str});
+        }
+
         inline size_t size() {
-            return fields.size() + (init.empty() ? 0 : 1) + (type.empty() ? 0 : 1);
+            return insts.size();
+            //return fields.size() + (init.empty() ? 0 : 1) + (type.empty() ? 0 : 1);
         }
     };
 
@@ -76,6 +103,10 @@ namespace alex {
         Action *action = nullptr;
         Production(Symbol *lhs) : lhs(lhs) {}
         Production(Symbol *lhs, const std::vector<Symbol *> &symbols) : lhs(lhs), symbols(symbols) {}
+        Symbol *get_symbol(size_t index) {
+            assert(index < symbols.size());
+            return symbols[index];
+        }
         Symbol *rightmost_teminal() {
             for (auto iter = symbols.rbegin(); iter != symbols.rend(); ++iter) {
                 if (!(*iter)->is_nonterminal()) {
@@ -110,6 +141,7 @@ namespace alex {
     };
 
     struct Nonterminal : Symbol {
+        string_t type;
         string_t identifier;
         std::vector<std::unique_ptr<Production>> productions;
         Nonterminal() = default;
@@ -129,6 +161,12 @@ namespace alex {
         }
         void dump() const override {
             std::cout << "<" << identifier << ">";
+        }
+        Production *get_active_production() {
+            if (productions.size() == 0) {
+                return nullptr;
+            }
+            return productions.back().get();
         }
         std::string to_str() override { return std::string(identifier); }
     };
@@ -232,34 +270,58 @@ namespace alex {
         }
     };
 
+    struct TypeInfo {
+        int index = 0;
+        int allocated = 0;
+        std::map<string_t, int> fields;
+        std::map<string_t, string_t> fields_type;
+
+        inline void set_field_type(const string_t &field, const string_t &type) {
+            fields_type[field] = type;
+        }
+        int get_field_index(const std::string &field) {
+            auto iter = fields.find(field);
+            if (iter == fields.end()) {
+                fields[field] = allocated++;
+            }
+            return fields[field];
+        }
+    };
     struct LALRGrammar {
-        struct ASTInfo {
-            int index = 0;
-            std::map<string_t, int> fields;
-            std::map<string_t, int> fields_type;
-        };
-        std::map<string_t, ASTInfo> ast_info;
+        std::set<string_t> types;
+        std::map<string_t, TypeInfo> type_info;
         std::vector<std::unique_ptr<Symbol>> symbols;
         std::vector<std::unique_ptr<Action>> actions;
-        std::set<std::string> types;
         Nonterminal *start = nullptr;
         Nonterminal *end = nullptr;
         Nonterminal *error = nullptr;
         Symbol *whitespace = nullptr;
+
+        TypeInfo &get_type(const string_t &type_name) {
+            if (types.count(type_name) || type_name.empty()) {
+                return type_info[type_name];
+            }
+            auto &type = type_info[type_name];
+            type.index = types.size();
+            types.insert(type_name);
+            return type;
+        }
     };
 
     enum TokenType {
         Token_Null,
         Token_String,
         Token_Identifier,
-        Token_Pipe,
-        Token_Arrow,
-        Token_None,
-        Token_Left,
-        Token_Right,
-        Token_LeftBrace,
-        Token_RightBrace,
-        Token_Comma,
+        Token_Bar, ///< '|'
+        Token_Arrow, ///< '->'
+        Token_NoneAsso,
+        Token_LeftAsso,
+        Token_RightAsso,
+        Token_LeftBrace, ///< '{'
+        Token_RightBrace, ///< '}'
+        Token_LeftBraket, ///< '['
+        Token_RightBraket, ///< ']'
+        Token_Comma, ///< ','
         Token_Colon,
         Token_Number,
         Token_Desc,
@@ -282,16 +344,18 @@ namespace alex {
         LALRGrammarParser(LALRGrammar &grammar) : grammar(grammar) {
             lexer.set_whitespace("([ \r\t\n]+)|(/\\*.*\\*/)|(//.*\n)");
             lexer.add_pattern("\"(\\\\.|.)*\"|'(\\\\.|.)*'", Token_String);
-            lexer.add_pattern("[a-zA-Z_][a-zA-Z0-9_]*", Token_Identifier);
-            lexer.add_pattern("\\|", Token_Pipe);
+            lexer.add_pattern("[-a-zA-Z_][-a-zA-Z0-9_]*", Token_Identifier);
+            lexer.add_pattern("\\|", Token_Bar);
             lexer.add_pattern("\\->", Token_Arrow);
-            lexer.add_pattern("%none", Token_None);
-            lexer.add_pattern("%left", Token_Left);
-            lexer.add_pattern("%right", Token_Right);
+            lexer.add_pattern("%none", Token_NoneAsso);
+            lexer.add_pattern("%left", Token_LeftAsso);
+            lexer.add_pattern("%right", Token_RightAsso);
             lexer.add_pattern("%start", Token_Start);
             lexer.add_pattern("%whitespace", Token_WhiteSpace);
             lexer.add_pattern("\\{", Token_LeftBrace);
             lexer.add_pattern("\\}", Token_RightBrace);
+            lexer.add_pattern("\\[", Token_LeftBraket);
+            lexer.add_pattern("\\]", Token_RightBraket);
             lexer.add_pattern(",", Token_Comma);
             lexer.add_pattern("(\\-)?[0-9]+(\\.[0-9]+)?", Token_Number);
             lexer.add_pattern("($|@|#)+[0-9]+", Token_Desc);
@@ -336,6 +400,9 @@ namespace alex {
             std::cout << ">>> " << lexer.lexeme() << std::endl;
             std::cout << "    " << "^^^" << std::endl;
         }
+        void report(const char *str) {
+            std::cout << "Warnning: " << str << std::endl;
+        }
 
         Nonterminal *get_nonterminal(string_t name) {
             if (nonterminal_table.count(name)) {
@@ -370,128 +437,178 @@ namespace alex {
 
         bool parse_expression() {
             lexer.advance();
-            if (lexer.symbol() == Token_Null) {
-                return false;
-            } else if (lexer.symbol() == Token_Semicolon) {
-                return true;
-            } else if (lexer.symbol() == Token_Identifier) {
-                active = get_nonterminal(lexer.lexeme());
-                lexer.advance();
-                if (!match(Token_Arrow)) {
-                    expect("->");
+            switch (lexer.symbol()) {
+                default:
+                    expect("identifier, associativity or start");
                     return false;
+                case Token_Null: return false;
+                case Token_Semicolon: return true;
+                case Token_Type:
+                case Token_Identifier: {
+                    std::string nonterminal_type;
+                    if (lexer.symbol() == Token_Type) {
+                        nonterminal_type = lexer.lexeme();
+                        lexer.advance();
+                    }
+                    active = get_nonterminal(lexer.lexeme());
+                    if (!active->type.empty()) {
+                        report("nonterminal already has a type");
+                    }
+                    active->type = nonterminal_type;
+                    lexer.advance();
+                    if (!match(Token_Arrow)) {
+                        expect("->");
+                        return false;
+                    }
+                    active->push_production(new Production(active));
+                    while (parse_production());
+                    break;
                 }
-                active->push_production(new Production(active));
-                while (parse_production());
-            } else if (lexer.symbol() >= Token_None && lexer.symbol() <= Token_Right) {
-                Associativity asso;
-                if (lexer.symbol() == Token_None) {
-                    asso = AssoNone;
+                case Token_NoneAsso:
+                case Token_LeftAsso:
+                case Token_RightAsso: {
+                    Associativity asso;
+                    if (lexer.symbol() == Token_NoneAsso)
+                        asso = AssoNone;
+                    if (lexer.symbol() == Token_LeftAsso)
+                        asso = AssoLeft;
+                    if (lexer.symbol() == Token_RightAsso)
+                        asso = AssoRight;
+                    lexer.advance();
+                    do {
+                        Symbol *symbol = parse_symbol();
+                        if (!symbol) {
+                            break;
+                        }
+                        symbol->associativity = asso;
+                        // aloocate operator precedence
+                        symbol->precedence = ++precedence;
+                    } while (true);
+                    break;
                 }
-                if (lexer.symbol() == Token_Left) {
-                    asso = AssoLeft;
-                }
-                if (lexer.symbol() == Token_Right) {
-                    asso = AssoRight;
-                }
-                lexer.advance();
-                do {
+                case Token_Start:
+                    lexer.advance();
+                    do {
+                        Symbol *symbol = parse_symbol();
+                        if (!symbol) {
+                            break;
+                        }
+                        grammar.start->push_start(symbol);
+                    } while (true);
+                    break;
+                case Token_WhiteSpace: {
+                    lexer.advance();
                     Symbol *symbol = parse_symbol();
                     if (!symbol) {
-                        break;
+                        expect("symbol");
+                        return false;
                     }
-                    symbol->associativity = asso;
-                    symbol->precedence = ++precedence;
-                } while (true);
-            } else if (lexer.symbol() == Token_Start) {
-                lexer.advance();
-                do {
-                    Symbol *symbol = parse_symbol();
-                    if (!symbol) {
-                        break;
+                    if (symbol->is_nonterminal()) {
+                        expect("terminal");
+                        return false;
                     }
-                    grammar.start->push_start(symbol);
-                } while (true);
-            } else if (lexer.symbol() == Token_WhiteSpace) {
-                lexer.advance();
-                Symbol *symbol = parse_symbol();
-                if (!symbol) {
-                    expect("symbol");
-                    return false;
+                    grammar.whitespace = symbol;
+                    break;
                 }
-                if (symbol->is_nonterminal()) {
-                    expect("terminal");
-                    return false;
-                }
-                grammar.whitespace = symbol;
-            } else {
-                expect("identifier, associativity or start");
-                return false;
             }
             return true;
         }
 
         bool parse_production() {
             do {
-                if (lexer.symbol() == Token_Pipe) {
-                    active->push_production(new Production(active));
-                    lexer.advance();
-                    return true;
-                } else if (lexer.symbol() == Token_LeftBrace || lexer.symbol() == Token_Desc || lexer.symbol() == Token_Type) {
-                    active->productions.back()->action = parse_action();
-                    continue;
-                } else if (lexer.symbol() == Token_Semicolon) {
-                    return false;
+                switch (lexer.symbol()) {
+                    case Token_Bar: // Or
+                        active->push_production(new Production(active));
+                        lexer.advance();
+                        return true;
+                    case Token_LeftBrace:
+                    case Token_LeftBraket:
+                    case Token_Desc:
+                    case Token_Type:
+                        active->productions.back()->action = parse_action();
+                        continue;
+                    case Token_Semicolon:
+                        return false;
+                    default:
+                        break;
                 }
-                Symbol *symbol = parse_symbol();
-                if (!symbol) {
+
+                if (Symbol *symbol = parse_symbol()) {
+                    active->push_symbol(symbol);
+                } else {
                     expect("regex or identifier");
                     return false;
                 }
-                active->push_symbol(symbol);
+
             } while (true);
         }
 
         Action *parse_action() {
             Action *action = new Action();
             grammar.actions.emplace_back(action);
-            while (lexer.symbol() == Token_Type || lexer.symbol() == Token_Desc) {
-                if (lexer.symbol() == Token_Type) {
+            action->type = active->type;
+            parser_object(action);
+            return action;
+
+            // Parse the action type or initializer
+            do {
+                if (lexer.symbol() == Token_Type){
                     action->type = lexer.lexeme();
                     lexer.advance();
-                }
-                if (lexer.symbol() == Token_Desc) {
+                } else if (lexer.symbol() == Token_Desc) {
                     action->init = lexer.lexeme();
                     lexer.advance();
+                } else {
+                    break;
                 }
-            }
-            auto &info = grammar.ast_info[action->type];
+            } while (true);
+
             if (lexer.symbol() != Token_LeftBrace) {
                 return action;
             }
+
+            // Get the action type info
+            TypeInfo &typeinfo = grammar.type_info[action->type];
             do {
                 lexer.advance();
                 if (lexer.symbol() != Token_Identifier) {
                     action->fields.emplace_back("", lexer.lexeme(), lexer.symbol(), -1);
                 } else {
                     auto field = lexer.lexeme();
-                    lexer.advance();
-                    if (lexer.symbol() != Token_Colon) {
+                    lexer.advance(); // eat field name
+                    if (lexer.symbol() != Token_Colon)
                         expect(":");
+                    lexer.advance(); // eat ':'
+                    switch (lexer.symbol()) {
+                        default: report("unexpected token"); break;
+                        case Token_Identifier:
+                            grammar.types.insert(lexer.lexeme());
+                            break;
+                        case Token_Type:
+                        case Token_Desc: {
+                            std::string field_type;
+                            if (lexer.symbol() == Token_Type) {
+                                // drop first character '@'
+                                field_type = lexer.lexeme().substr(1);
+                                grammar.types.insert(field_type);
+                                lexer.advance();
+                            }
+                            auto desc = lexer.lexeme();
+                            if (field_type.empty()) {
+                                if (auto *cur_production = active->get_active_production()) {
+                                    // TODO: take field type account for ast
+                                    int operate_index = std::stoi(desc.substr(1));
+                                    if (auto *nt = cur_production->get_symbol(operate_index)->nonterminal()) {
+                                        field_type = nt->type;
+                                    }
+                                }
+                            }
+                            typeinfo.set_field_type(field, field_type);
+                            int field_index = typeinfo.get_field_index(field);
+                            action->fields.emplace_back(field, desc, lexer.symbol(), field_index);
+                            break;
+                        }
                     }
-                    lexer.advance();
-                    if (lexer.symbol() == Token_Identifier) {
-                        grammar.types.insert(lexer.lexeme());
-                    }
-                    int index = 0;
-                    if (info.fields.count(field)) {
-                        index = info.fields[field];
-                    } else {
-                        index = info.fields.size();
-                        info.fields[field] = index;
-                        info.fields_type[field] = lexer.symbol();
-                    }
-                    action->fields.emplace_back(field, lexer.lexeme(), lexer.symbol(), index);
                 }
                 lexer.advance();
             } while (lexer.symbol() == Token_Comma);
@@ -499,6 +616,154 @@ namespace alex {
                 expect("}");
             }
             return action;
+        }
+
+        int parser_object(Action *action) {
+            /**
+             * $2{value:10}
+             * push_value $2
+             * push_int 10
+             * pop_set value
+             *
+             * $2{value:#2}
+             * push_value $2
+             * push_value $2
+             * pop_insert_obj value
+             *
+             * $2{value:$2}
+             * push_value $2
+             * push_value $2
+             * pop_set value
+             *
+             * @Value {value:66, obj: @Test {name: @1}}
+             * create_obj @Value
+             * push_int 66
+             * pop_set value
+             * create_obj @Test
+             * push_token @1
+             * pop_set name
+             * pop_set obj
+             *
+             * @Value $2{value: 20}
+             * push_value $2
+             * push_int 20
+             * pop_set value
+             *
+             * {value: [1, 2, 3]}
+             * create_obj
+             * create_arr
+             * push_int 1
+             * pop_insert
+             * push_int 2
+             * pop_insert
+             * push_int 3
+             * pop_insert
+             * pop_set value
+             */
+            int retcode = 0;
+            string_t type = "";
+            if (lexer.symbol() == Token_Type) {
+                type = lexer.lexeme().substr(1);
+                lexer.advance();
+            }
+
+            TypeInfo &typeinfo = grammar.get_type(type);
+
+            // load initial value
+            if (lexer.symbol() == Token_Desc) {
+                // push_value $2
+                auto first_char = lexer.lexeme().front();
+                auto index = std::stoi(lexer.lexeme().substr(1)) - 1;
+                switch (first_char) {
+                    case '@':
+                        action->add_inst(OpcodePushToken, index);
+                        break;
+                    case '#':
+                        retcode = 1;
+                        action->add_inst(OpcodePushValue, index);
+                        break;
+                    case '$':
+                        action->add_inst(OpcodePushValue, index);
+                        break;
+                }
+                lexer.advance();
+            } else if (lexer.symbol() == Token_LeftBrace) {
+                action->add_inst(OpcodeCreateObj, typeinfo.index, type);
+            } else if (lexer.symbol() == Token_LeftBraket) {
+                action->add_inst(OpcodeCreateArr, typeinfo.index, type);
+            }
+
+            switch (lexer.symbol()) {
+                case Token_LeftBrace:
+                    lexer.advance();
+                    do {
+                        if (lexer.symbol() == Token_RightBrace) {
+                            break;
+                        }
+                        assert(lexer.symbol() == Token_Identifier); // identify: value
+                        auto field = lexer.lexeme();
+                        lexer.advance(); // eat field name
+                        if (!match(Token_Colon)) {
+                            expect(":");
+                        }
+                        switch (lexer.symbol()) {
+                            default: break;
+                            case Token_Type:
+                                typeinfo.set_field_type(field, lexer.lexeme().substr(1));
+                                break;
+                            case Token_Number:
+                                typeinfo.set_field_type(field, "int");
+                                break;
+                            case Token_String:
+                                typeinfo.set_field_type(field, "string");
+                                break;
+                            case Token_Bool:
+                                typeinfo.set_field_type(field, "bool");
+                                break;
+                        }
+                        if (parser_object(action) == 1) {
+                            action->add_inst(OpcodePopInsertObj, typeinfo.get_field_index(field), field);
+                        } else {
+                            action->add_inst(OpcodePopSet, typeinfo.get_field_index(field), field);
+                        }
+                    } while (match(Token_Comma));
+                    if (!match(Token_RightBrace)) {
+                        expect("}");
+                    }
+                    break;
+                case Token_LeftBraket: {
+                    lexer.advance();
+                    do {
+                        if (lexer.symbol() == Token_RightBraket) {
+                            break;
+                        }
+                        parser_object(action);
+                        action->add_inst(OpcodePopInsertArr);
+                    } while (match(Token_Comma));
+                    if (!match(Token_RightBraket)) {
+                        expect("]");
+                    }
+                    break;
+                }
+                case Token_Number:
+                    action->add_inst(OpcodePushInt, std::stoi(lexer.lexeme()));
+                    lexer.advance();
+                    break;
+                case Token_Bool:
+                    action->add_inst(OpcodePushBool, lexer.lexeme() == "true");
+                    lexer.advance();
+                    break;
+                case Token_String:
+                    action->add_inst(OpcodePushStr, lexer.lexeme().substr(1, lexer.lexeme().size() - 2));
+                    lexer.advance();
+                    break;
+                case Token_Identifier:
+                    // TODO: check here
+                    break;
+                default:
+                    break;
+            }
+            return retcode;
         }
 
         Symbol *parse_symbol() {

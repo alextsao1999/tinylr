@@ -14,7 +14,6 @@ int main() {
 
     if (parser.accept()) {
         auto value = parser.value();
-        //value->dump(std::cout);
         std::cout << value.dump(4) << std::endl;
     }
     return 0;

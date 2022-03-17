@@ -27,14 +27,14 @@
 
 namespace alex {
     using RegexChar = int;
-    using SymbolType = int;
-    constexpr SymbolType SymbolNull = 0;
+    //using SymbolType = int;
+    //constexpr SymbolType SymbolNull = 0;
     constexpr RegexChar RegexMinChar = std::numeric_limits<RegexChar>::min();
     constexpr RegexChar RegexMaxChar = std::numeric_limits<RegexChar>::max();
 
     class RegexVisitor;
     class RegexRange;
-    class RegexState;
+    //class RegexState;
 
     class RegexNode {
     public:
@@ -216,39 +216,43 @@ namespace alex {
     };
     using RangeSet = std::set<RegexRange *, RegexRangeCompare>;
 
-    struct RegexTransition {
-        RegexState *state = nullptr;
-        RegexChar begin;
-        RegexChar end;
-        RegexTransition(RegexState *state, RegexChar begin, RegexChar end) : state(state), begin(begin), end(end) {}
-        RegexTransition(RegexChar begin, RegexChar end) : begin(begin), end(end) {}
-
-        bool operator<(const RegexTransition &other) const {
-            return begin < other.begin || (begin == other.begin && end < other.end);
-        }
-    };
-    struct RegexState {
-        size_t index = 0;
-        SymbolType symbol = SymbolNull;
-        std::set<RegexRange *> gotos; // list index of the leaf
-        std::set<RegexTransition> transitions;
-
-        RegexState() = default;
-        RegexState(size_t index, SymbolType symbol, std::set<RegexRange *> gotos) : index(index), symbol(symbol),
-                                                                                    gotos(std::move(gotos)) {}
-
-        inline const RegexTransition *find_trans(const uint8_t chr) const {
-            for (auto &item: transitions) {
-                if (chr >= item.begin && chr < item.end) {
-                    return &item;
-                }
-            }
-            return nullptr;
-        }
-    };
-
+    template<class SymbolType = int>
     class RegexGenerator : private RegexVisitor {
     public:
+        constexpr static SymbolType SymbolNull = SymbolType();
+
+        class State;
+        struct Transition {
+            State *state = nullptr;
+            RegexChar begin;
+            RegexChar end;
+            Transition(State *state, RegexChar begin, RegexChar end) : state(state), begin(begin), end(end) {}
+            Transition(RegexChar begin, RegexChar end) : begin(begin), end(end) {}
+            bool operator<(const Transition &other) const {
+                return begin < other.begin || (begin == other.begin && end < other.end);
+            }
+        };
+        struct State {
+            size_t index = 0;
+            SymbolType symbol = SymbolNull;
+            std::set<RegexRange *> gotos; // list index of the leaf
+            std::set<Transition> transitions;
+
+            State() = default;
+            State(size_t index, SymbolType symbol, std::set<RegexRange *> gotos) : index(index), symbol(symbol),
+                                                                                        gotos(std::move(gotos)) {}
+            inline const Transition *find_trans(const uint8_t chr) const {
+                for (auto &item: transitions) {
+                    if (chr >= item.begin && chr < item.end) {
+                        return &item;
+                    }
+                }
+                return nullptr;
+            }
+        };
+        using RegexTransition = Transition;
+        using RegexState = State;
+
         std::set<RegexRange *> firstpos; // all first pos
         std::vector<std::unique_ptr<RegexState>> states;
         std::vector<std::shared_ptr<RegexNode>> nodes;
@@ -317,6 +321,7 @@ namespace alex {
         }
 
         void generate_transition(RegexState *state) {
+            // FIXME: Remove RangeSet
             RangeSet ranges;
             ranges.insert(state->gotos.begin(), state->gotos.end());
 
@@ -479,7 +484,7 @@ namespace alex {
                         break;
                 }
             }
-            return uint8_t(*m_current++);
+            return *m_current++;
         }
 
         int parse_integer() {
@@ -603,23 +608,6 @@ namespace alex {
             return 0;
         }
     };
-
-    template <typename It>
-    SymbolType regex_match(std::vector<std::unique_ptr<RegexState>> &state_machine, It string) {
-        auto *state = state_machine[0].get();
-        do {
-            auto *trans = state->find_trans(*(string));
-            if (trans == nullptr) {
-                return state->symbol;
-            }
-            state = trans->state;
-            if ((*++string) == '\0') {
-                return state->symbol;
-            }
-        } while (*string != '\0');
-        return state->symbol;
-    }
-
 }
 
 #endif //ALEX_LIBS_REGEX_H

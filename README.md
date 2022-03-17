@@ -1,7 +1,7 @@
 # tinylr
 a tiny lalr generator inspired by Charles Baker's lalr
 
-generate value_t format ast from grammar
+generate json format ast from grammar
 
 glr parser can handle the shift-reduce conflict and reduce-reduce conflict grammar easily
 

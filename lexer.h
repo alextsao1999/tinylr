@@ -80,14 +80,15 @@ namespace alex {
         }
     };
 
-    template <class iter_t = StringIter<>>
+    template <class iter_t = StringIter<>, class symbol_t = int>
     class Lexer {
     public:
+        using RegexGen = RegexGenerator<symbol_t>;
         using char_t = typename std::iterator_traits<iter_t>::value_type;
-        using uchar_t = typename std::make_unsigned<char_t>::type;
         using string_t = std::basic_string<char_t>;
-        using symbol_t = int;
-        RegexGenerator generator;
+        RegexGen generator;
+        using RegexState = typename RegexGen::State;
+        using RegexTransition = typename RegexGen::Transition;
         std::vector<std::unique_ptr<RegexState>> state_machine;
         std::vector<std::unique_ptr<RegexState>> whitespace;
         iter_t current;
@@ -102,17 +103,17 @@ namespace alex {
         Lexer() = default;
         void set_whitespace(std::string_view pattern) {
             RegexParser parser(pattern.data(), pattern.data() + pattern.size());
-            RegexGenerator space_generator;
-            space_generator.feed(parser.parse_concat(), (SymbolType) 1);
+            RegexGen space_generator;
+            space_generator.feed(parser.parse_concat(), 1);
             whitespace = std::move(space_generator.generate());
         }
         void add_pattern(std::string_view pattern, symbol_t symbol) {
             RegexParser parser(pattern.data(), pattern.data() + pattern.size());
-            generator.feed(parser.parse_concat(), (SymbolType) symbol);
+            generator.feed(parser.parse_concat(), symbol);
         }
         void add_literal(std::string_view pattern, symbol_t symbol) {
             RegexParser parser(pattern.data(), pattern.data() + pattern.size());
-            generator.feed(parser.parse_literal(), (SymbolType) symbol);
+            generator.feed(parser.parse_literal(), symbol);
         }
         void generate_states() {
             state_machine = std::move(generator.generate());
@@ -122,18 +123,19 @@ namespace alex {
             this->last = end;
         }
         void advance() {
-            while (advance_symbol(whitespace[0].get()) != SymbolNull);
+            while (advance_symbol(whitespace[0].get()) != RegexGen::SymbolNull);
             token_start = position_;
-            SymbolType symbol = advance_symbol(state_machine[0].get());
-            if (symbol == SymbolNull && current != last) {
+            symbol_t symbol = advance_symbol(state_machine[0].get());
+            if (symbol == RegexGen::SymbolNull && current != last) {
                 std::cout << "Unexpect char: " << *current << " line:" << line() << std::endl;
             }
-            token_symbol = (symbol_t) symbol;
+            token_symbol = symbol;
         }
         inline string_t &lexeme() { return lexeme_; }
         inline symbol_t symbol() { return token_symbol; }
         inline int line() { return line_; }
         inline int column() { return token_start - token_line_start; }
+
         void dump() {
             do {
                 advance();
@@ -141,8 +143,13 @@ namespace alex {
             } while (symbol() != 0);
             exit(0);
         }
+
+        bool eof() {
+            return current == last;
+        }
+
     private:
-        SymbolType advance_symbol(RegexState *begin) {
+        symbol_t advance_symbol(RegexState *begin) {
             lexeme_.clear();
             RegexState *state = begin;
             do {
@@ -154,7 +161,7 @@ namespace alex {
                     lexeme_ += *current;
                     state = trans->state;
                     ++position_;
-                    if (*current == uchar_t('\n')) {
+                    if (*current == '\n') {
                         ++line_;
                         token_line_start = position_;
                     }

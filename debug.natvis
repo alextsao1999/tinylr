@@ -26,9 +26,9 @@
         </Expand>
     </Type>
     <Type Name="ParserState">
-        <DisplayString Condition="conflict == 0">{{ Index = {index}, Size = {transition_count} }}</DisplayString>
-        <DisplayString Condition="conflict == 1">{{ Index = {index}, Size = {transition_count}, ShiftReduce }}</DisplayString>
-        <DisplayString Condition="conflict == 2">{{ Index = {index}, Size = {transition_count}, ReduceReduce }}</DisplayString>
+        <DisplayString Condition="conflict == 0">{{ Index = {allocated}, Size = {transition_count} }}</DisplayString>
+        <DisplayString Condition="conflict == 1">{{ Index = {allocated}, Size = {transition_count}, ShiftReduce }}</DisplayString>
+        <DisplayString Condition="conflict == 2">{{ Index = {allocated}, Size = {transition_count}, ReduceReduce }}</DisplayString>
 <!--        <DisplayString>{{ Size = {transition_count} }}</DisplayString>-->
         <Expand>
             <ArrayItems>
@@ -87,6 +87,13 @@
             <Item Name="[Begin]">((char) begin)</Item>
             <Item Name="[End]">((char) (end - 1))</Item>
             <Item Name="[State]">state</Item>
+        </Expand>
+    </Type>
+    <Type Name="ReduceAction">
+        <Expand>
+            <Item Name="[Opcode]">((ActionOpcode) opcode)</Item>
+            <Item Name="[Int]">index</Item>
+            <Item Name="[Str]">value</Item>
         </Expand>
     </Type>
     <Type Name="alex::RegexRange">
