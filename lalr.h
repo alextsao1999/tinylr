@@ -645,6 +645,8 @@ namespace alex {
                         if (!match(Token_Colon)) {
                             expect(":");
                         }
+
+                        // store field type
                         switch (lexer.symbol()) {
                             default: break;
                             case Token_Type:
@@ -654,7 +656,7 @@ namespace alex {
                                 typeinfo.set_field_type(field, "int");
                                 break;
                             case Token_String:
-                                typeinfo.set_field_type(field, "std::string");
+                                typeinfo.set_field_type(field, "string_t&");
                                 break;
                             case Token_Bool:
                                 typeinfo.set_field_type(field, "bool");

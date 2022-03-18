@@ -13,6 +13,7 @@ program -> function_declare $1
          | class_declare $1
          | variable_declare $1
          | import $1
+         | stmt $1
          ;
 
 import -> 'import' import_items ';' @Import {items:$2};
@@ -26,7 +27,7 @@ import_item -> identifier $1
              ;
 
 class_declare -> 'class' identifier template super '{' classbody '}'
-	@ClassDeclare{@std::string name: $2, template:$3, super:$4, body:$6};
+	@ClassDeclare{@string_t& name: $2, template:$3, super:$4, body:$6};
 
 super -> ':' identifier $2
        |
@@ -181,10 +182,10 @@ args   -> args ',' expr $1[$3]
         |
         ;
 
-literal -> "\".*\"" @String{value:@1}
-         | "[0-9]+" @Number{value:@1}
+literal -> "\".*\"" @String{@string_t& string:@1}
+         | "[0-9]+" @Number{@string_t& string:@1}
          | "[0-9]+\.[0-9]*f?" @Float{value:@1}
-         | "[0-9]+u" @Unsigned{unsigned:true, value:@1}
+         | "[0-9]+u" @Unsigned{value:@1}
          | "[0-9]+L" @Long{value:@1}
          | "0x[0-9A-F]+" @Hex{value:@1}
          | "0b[0-1]+" @Bin{value:@1}

@@ -26,6 +26,11 @@ struct MyVisitor : public Visitor<MyVisitor> {
     void visitFunctionDeclare(FunctionDeclare value) {
         visit(value.getBlock());
     }
+
+    void visitParam(Param value) {
+        Visitor::visitParam(value);
+    }
+
 };
 
 int main() {

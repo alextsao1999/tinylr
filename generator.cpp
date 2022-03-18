@@ -274,7 +274,9 @@ public:
               "#include <cassert>\n"
               "#include <functional>\n\n";
 
-        os << "#define LR_UNREACHED() assert(!\"unreached here\")\n\n";
+        os << "#define LR_ASSERT(x) assert(x)\n"
+              "#define LR_UNREACHED() assert(!\"unreached here\")\n"
+              "#define LR_TYPESPEC(TYPE) TYPE\n\n";
 
         os << "#define CONFLICT_NONE 0\n"
               "#define CONFLICT_SHIFT_REDUCE 1\n"
@@ -477,83 +479,106 @@ public:
         os << "#include \"json.hpp\"\n"
            << "using value_t = nlohmann::json;\n\n";
 
+        // type dispatcher
         if (grammar.types.size() > 0) {
+            // generate type enum
             os << "enum {\n";
-            os << "    " << options.prefix << "NONE = -1,\n";
+            os << "    " << options.prefix << "NONE = 0,\n";
             for (auto &type : grammar.types) {
                 os << "    " << options.prefix << string_upper(type);
                 os << " = " << grammar.type_info[type].index;
                 os << ",\n";
             }
             os << "};\n";
-        }
-        os << "class JsonASTBase {\n"
-              "protected:\n"
-              "    value_t &value_;\n"
-              "public:\n"
-              "    JsonASTBase(value_t &value) : value_(value) {}\n"
-              "    int getID() { return value_[\"id\"].get<int>(); }\n"
-              "    std::string getKind() { return value_[\"name\"].get<std::string>(); }\n"
-              "    operator value_t &() { return value_; }\n"
-              "};\n";
-        for (auto &[name, type]: grammar.type_info) {
-            if (name.empty()) {
-                continue;
-            }
-            os << "class " << name << " : public JsonASTBase {\n"
-                  "public:\n"
-                  "    using JsonASTBase::JsonASTBase;\n";
-            for (auto &[field, index]: type.fields) {
-                auto output = field;
-                output[0] = std::toupper(output[0]);
-                output = "get" + output;
 
-                auto field_type = type.fields_type[field];
-                if (field_type.empty()) {
-                    os << "    " << "value_t &";
-                    os << output << "() { return value_[\"" << field << "\"]; }\n";
-                } else {
-                    os << "    " << field_type << " ";
-                    os << output << "() { return value_[\"" << field << "\"].get<" << field_type << ">(); }\n";
+            // generate base type
+            os << "class JsonASTBase {\n"
+                  "protected:\n"
+                  "    value_t &value_;\n"
+                  "public:\n"
+                  "    using float_t = value_t::number_float_t;\n"
+                  "    using int_t = value_t::number_integer_t;\n"
+                  "    using uint_t = value_t::number_unsigned_t;\n"
+                  "    using string_t = value_t::string_t;\n"
+                  "    using iter_t = value_t::iterator;\n"
+                  "    using const_iter_t = value_t::const_iterator;\n"
+                  "    using size_t = value_t::size_type;\n"
+                  "    JsonASTBase(value_t &value) : value_(value) {}\n"
+                  "    int getID() { return value_[\"id\"].get<int>(); }\n"
+                  "    string_t &getKind() { return value_[\"kind\"].get_ref<string_t &>(); }\n"
+                  "    operator value_t &() { return value_; }\n"
+                  "};\n";
+
+            // generate derived type
+            for (auto &[name, type]: grammar.type_info) {
+                if (name.empty()) {
+                    continue;
                 }
+                os << "class " << name << " : public JsonASTBase {\n"
+                                          "public:\n";
+
+                //output constructor
+                os << "    "
+                   << name << "(value_t &value) : JsonASTBase(value) { LR_ASSERT(value[\"id\"] == " << options.prefix
+                   << string_upper(name) << "); }\n";
+                // os << "    using JsonASTBase::JsonASTBase;\n";
+                // Number(value_t &value) : JsonASTBase(value) { LR_ASSERT(value["id"] == TYPE_NUMBER); }
+
+                for (auto &[field, index]: type.fields) {
+                    auto output = field;
+                    output[0] = std::toupper(output[0]);
+                    output = "get" + output;
+
+                    auto field_type = type.fields_type[field];
+                    if (field_type.empty()) { // non type
+                        os << "    " << "value_t &";
+                        os << output << "() { return value_[\"" << field << "\"]; }\n";
+                    } else if (field_type.back() == '&') { // get_ref
+                        os << "    " << field_type << " ";
+                        os << output << "() { return value_[\"" << field << "\"].get_ref<" << field_type << ">(); }\n";
+                    } else { // get
+                        os << "    " << field_type << " ";
+                        os << output << "() { return value_[\"" << field << "\"].get<" << field_type << ">(); }\n";
+                    }
+                }
+                os << "};\n";
+            }
+
+            // generate visitor
+            os << "template<typename SubTy, typename RetTy = void>\n"
+                  "struct Visitor {\n"
+                  "    RetTy visit(value_t &value) {\n"
+                  "        if (value.is_null()) {\n"
+                  "            return RetTy();\n"
+                  "        }\n"
+                  "        if (value.is_array()) {\n"
+                  "            for (auto &val : value) {\n"
+                  "                visit(val);\n"
+                  "            }\n"
+                  "            return RetTy();\n"
+                  "        }\n"
+                  "        switch (value[\"id\"].get<int>()) {\n";
+            for (auto &[name, type]: grammar.type_info) {
+                if (name.empty()) {
+                    continue;
+                }
+                os << "            case " << options.prefix << string_upper(name) << ":\n"
+                   << "                return static_cast<SubTy *>(this)->visit" << name  << "(value);\n";
+            }
+            os << "            default:\n"
+                  "                LR_UNREACHED();\n"
+                  "        }\n"
+                  "    }\n";
+            for (auto &[name, type]: grammar.type_info) {
+                if (name.empty()) {
+                    continue;
+                }
+                os << "    LR_TYPESPEC(RetTy) visit" << name << "(" << name << " value) {\n"
+                   << "        return RetTy();\n"
+                   << "    }\n";
             }
             os << "};\n";
         }
-
-        // Output visitor
-        os << "template<typename SubTy, typename RetTy = void>\n"
-              "struct Visitor {\n"
-              "    RetTy visit(value_t &value) {\n"
-              "        if (value.is_null()) {\n"
-              "            return RetTy();\n"
-              "        }\n"
-              "        if (value.is_array()) {\n"
-              "            for (auto &val : value) {\n"
-              "                visit(val);\n"
-              "            }\n"
-              "            return RetTy();\n"
-              "        }\n"
-              "        switch (value[\"id\"].get<int>()) {\n";
-        for (auto &[name, type]: grammar.type_info) {
-            if (name.empty()) {
-                continue;
-            }
-            os << "            case " << options.prefix << string_upper(name) << ":\n"
-               << "                return static_cast<SubTy *>(this)->visit" << name  << "(value);\n";
-        }
-        os << "            default:\n"
-              "                LR_UNREACHED();\n"
-              "        }\n"
-              "    }\n";
-        for (auto &[name, type]: grammar.type_info) {
-            if (name.empty()) {
-                continue;
-            }
-            os << "    RetTy visit" << name << "(" << name << " value) {\n"
-               << "        return RetTy();\n"
-               << "    }\n";
-        }
-        os << "};\n";
 
         // HandleReduceAction
         os << R"cpp(
@@ -563,9 +588,12 @@ inline void HandleReduceAction(ReduceAction &action, std::vector<value_t> &arr, 
         default:
             LR_UNREACHED();
         case OpcodeCreateObj:
-            arr.push_back(value_t::object_t(
-                    {{"kind", value_t::string_t(action.value)},
-                     {"id", value_t::number_integer_t(action.index)}}));
+            if (action.index)
+                arr.push_back(value_t::object_t(
+                        {{"kind", value_t::string_t(action.value)},
+                         {"id",   value_t::number_integer_t(action.index)}}));
+            else
+                arr.push_back(value_t::object_t());
             break;
         case OpcodeCreateArr:
             arr.push_back(value_t::array_t());
@@ -612,7 +640,9 @@ inline void HandleReduceAction(ReduceAction &action, std::vector<value_t> &arr, 
 
         // LRParser
         os << R"cpp(
-template<class iter_t = const char *, class char_t = typename std::iterator_traits<iter_t>::value_type, class char_traits = std::char_traits<char_t>>
+template<class iter_t = const char *,
+        class char_t = typename std::iterator_traits<iter_t>::value_type,
+        class char_traits = std::char_traits<char_t>>
 class LRParser {
 public:
     using Lexer = ParserLexer<iter_t>;

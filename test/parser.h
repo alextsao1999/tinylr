@@ -11,7 +11,9 @@
 #include <cassert>
 #include <functional>
 
+#define LR_ASSERT(x) assert(x)
 #define LR_UNREACHED() assert(!"unreached here")
+#define LR_TYPESPEC(TYPE) inline TYPE
 
 #define CONFLICT_NONE 0
 #define CONFLICT_SHIFT_REDUCE 1
@@ -202,7 +204,7 @@ public:
 using value_t = nlohmann::json;
 
 enum {
-    TYPE_NONE = -1,
+    TYPE_NONE = 0,
     TYPE_ACCESSEXPR = 33,
     TYPE_ARROWEXPR = 28,
     TYPE_ASSIGNEXPR = 27,
@@ -250,115 +252,122 @@ class JsonASTBase {
 protected:
     value_t &value_;
 public:
+    using float_t = value_t::number_float_t;
+    using int_t = value_t::number_integer_t;
+    using uint_t = value_t::number_unsigned_t;
+    using string_t = value_t::string_t;
+    using iter_t = value_t::iterator;
+    using const_iter_t = value_t::const_iterator;
+    using size_t = value_t::size_type;
     JsonASTBase(value_t &value) : value_(value) {}
     int getID() { return value_["id"].get<int>(); }
-    std::string getKind() { return value_["name"].get<std::string>(); }
+    string_t &getKind() { return value_["kind"].get_ref<string_t &>(); }
     operator value_t &() { return value_; }
 };
 class AccessExpr : public JsonASTBase {
 public:
-    using JsonASTBase::JsonASTBase;
+    AccessExpr(value_t &value) : JsonASTBase(value) { LR_ASSERT(value["id"] == TYPE_ACCESSEXPR); }
     value_t &getField() { return value_["field"]; }
     value_t &getLhs() { return value_["lhs"]; }
 };
 class ArrowExpr : public JsonASTBase {
 public:
-    using JsonASTBase::JsonASTBase;
+    ArrowExpr(value_t &value) : JsonASTBase(value) { LR_ASSERT(value["id"] == TYPE_ARROWEXPR); }
     value_t &getBlock() { return value_["block"]; }
     value_t &getParams() { return value_["params"]; }
 };
 class AssignExpr : public JsonASTBase {
 public:
-    using JsonASTBase::JsonASTBase;
+    AssignExpr(value_t &value) : JsonASTBase(value) { LR_ASSERT(value["id"] == TYPE_ASSIGNEXPR); }
     value_t &getLeft() { return value_["left"]; }
     value_t &getRight() { return value_["right"]; }
 };
 class Bin : public JsonASTBase {
 public:
-    using JsonASTBase::JsonASTBase;
+    Bin(value_t &value) : JsonASTBase(value) { LR_ASSERT(value["id"] == TYPE_BIN); }
     value_t &getValue() { return value_["value"]; }
 };
 class BinaryExpr : public JsonASTBase {
 public:
-    using JsonASTBase::JsonASTBase;
+    BinaryExpr(value_t &value) : JsonASTBase(value) { LR_ASSERT(value["id"] == TYPE_BINARYEXPR); }
     value_t &getLeft() { return value_["left"]; }
     value_t &getOp() { return value_["op"]; }
     value_t &getRight() { return value_["right"]; }
 };
 class BlockStmt : public JsonASTBase {
 public:
-    using JsonASTBase::JsonASTBase;
+    BlockStmt(value_t &value) : JsonASTBase(value) { LR_ASSERT(value["id"] == TYPE_BLOCKSTMT); }
     value_t &getValue() { return value_["value"]; }
 };
 class BreakStmt : public JsonASTBase {
 public:
-    using JsonASTBase::JsonASTBase;
+    BreakStmt(value_t &value) : JsonASTBase(value) { LR_ASSERT(value["id"] == TYPE_BREAKSTMT); }
 };
 class CaseStmt : public JsonASTBase {
 public:
-    using JsonASTBase::JsonASTBase;
+    CaseStmt(value_t &value) : JsonASTBase(value) { LR_ASSERT(value["id"] == TYPE_CASESTMT); }
     value_t &getBody() { return value_["body"]; }
     value_t &getBranches() { return value_["branches"]; }
     value_t &getCondition() { return value_["condition"]; }
 };
 class CastMethodDeclare : public JsonASTBase {
 public:
-    using JsonASTBase::JsonASTBase;
+    CastMethodDeclare(value_t &value) : JsonASTBase(value) { LR_ASSERT(value["id"] == TYPE_CASTMETHODDECLARE); }
     value_t &getBlock() { return value_["block"]; }
     value_t &getType() { return value_["type"]; }
 };
 class Char : public JsonASTBase {
 public:
-    using JsonASTBase::JsonASTBase;
+    Char(value_t &value) : JsonASTBase(value) { LR_ASSERT(value["id"] == TYPE_CHAR); }
     value_t &getValue() { return value_["value"]; }
 };
 class ClassDeclare : public JsonASTBase {
 public:
-    using JsonASTBase::JsonASTBase;
+    ClassDeclare(value_t &value) : JsonASTBase(value) { LR_ASSERT(value["id"] == TYPE_CLASSDECLARE); }
     value_t &getBody() { return value_["body"]; }
-    std::string getName() { return value_["name"].get<std::string>(); }
+    string_t& getName() { return value_["name"].get_ref<string_t&>(); }
     value_t &getSuper() { return value_["super"]; }
     value_t &getTemplate() { return value_["template"]; }
 };
 class ContinueStmt : public JsonASTBase {
 public:
-    using JsonASTBase::JsonASTBase;
+    ContinueStmt(value_t &value) : JsonASTBase(value) { LR_ASSERT(value["id"] == TYPE_CONTINUESTMT); }
 };
 class DoWhileStmt : public JsonASTBase {
 public:
-    using JsonASTBase::JsonASTBase;
+    DoWhileStmt(value_t &value) : JsonASTBase(value) { LR_ASSERT(value["id"] == TYPE_DOWHILESTMT); }
     value_t &getBody() { return value_["body"]; }
     value_t &getCondition() { return value_["condition"]; }
 };
 class DotExpr : public JsonASTBase {
 public:
-    using JsonASTBase::JsonASTBase;
+    DotExpr(value_t &value) : JsonASTBase(value) { LR_ASSERT(value["id"] == TYPE_DOTEXPR); }
     value_t &getField() { return value_["field"]; }
     value_t &getLhs() { return value_["lhs"]; }
 };
 class Error : public JsonASTBase {
 public:
-    using JsonASTBase::JsonASTBase;
-    std::string getContent() { return value_["content"].get<std::string>(); }
+    Error(value_t &value) : JsonASTBase(value) { LR_ASSERT(value["id"] == TYPE_ERROR); }
+    string_t& getContent() { return value_["content"].get_ref<string_t&>(); }
     value_t &getValue() { return value_["value"]; }
 };
 class ExprStmt : public JsonASTBase {
 public:
-    using JsonASTBase::JsonASTBase;
+    ExprStmt(value_t &value) : JsonASTBase(value) { LR_ASSERT(value["id"] == TYPE_EXPRSTMT); }
     value_t &getValue() { return value_["value"]; }
 };
 class FieldDeclare : public JsonASTBase {
 public:
-    using JsonASTBase::JsonASTBase;
+    FieldDeclare(value_t &value) : JsonASTBase(value) { LR_ASSERT(value["id"] == TYPE_FIELDDECLARE); }
 };
 class Float : public JsonASTBase {
 public:
-    using JsonASTBase::JsonASTBase;
+    Float(value_t &value) : JsonASTBase(value) { LR_ASSERT(value["id"] == TYPE_FLOAT); }
     value_t &getValue() { return value_["value"]; }
 };
 class FunctionDeclare : public JsonASTBase {
 public:
-    using JsonASTBase::JsonASTBase;
+    FunctionDeclare(value_t &value) : JsonASTBase(value) { LR_ASSERT(value["id"] == TYPE_FUNCTIONDECLARE); }
     value_t &getBlock() { return value_["block"]; }
     bool getInline() { return value_["inline"].get<bool>(); }
     value_t &getName() { return value_["name"]; }
@@ -369,50 +378,50 @@ public:
 };
 class Hex : public JsonASTBase {
 public:
-    using JsonASTBase::JsonASTBase;
+    Hex(value_t &value) : JsonASTBase(value) { LR_ASSERT(value["id"] == TYPE_HEX); }
     value_t &getValue() { return value_["value"]; }
 };
 class IfStmt : public JsonASTBase {
 public:
-    using JsonASTBase::JsonASTBase;
+    IfStmt(value_t &value) : JsonASTBase(value) { LR_ASSERT(value["id"] == TYPE_IFSTMT); }
     value_t &getCondition() { return value_["condition"]; }
     value_t &getElse() { return value_["else"]; }
     value_t &getThen() { return value_["then"]; }
 };
 class Import : public JsonASTBase {
 public:
-    using JsonASTBase::JsonASTBase;
+    Import(value_t &value) : JsonASTBase(value) { LR_ASSERT(value["id"] == TYPE_IMPORT); }
     value_t &getItems() { return value_["items"]; }
 };
 class InvokeExpr : public JsonASTBase {
 public:
-    using JsonASTBase::JsonASTBase;
+    InvokeExpr(value_t &value) : JsonASTBase(value) { LR_ASSERT(value["id"] == TYPE_INVOKEEXPR); }
     value_t &getArgs() { return value_["args"]; }
     value_t &getName() { return value_["name"]; }
 };
 class Long : public JsonASTBase {
 public:
-    using JsonASTBase::JsonASTBase;
+    Long(value_t &value) : JsonASTBase(value) { LR_ASSERT(value["id"] == TYPE_LONG); }
     value_t &getValue() { return value_["value"]; }
 };
 class MethodDeclare : public JsonASTBase {
 public:
-    using JsonASTBase::JsonASTBase;
+    MethodDeclare(value_t &value) : JsonASTBase(value) { LR_ASSERT(value["id"] == TYPE_METHODDECLARE); }
 };
 class NewExpr : public JsonASTBase {
 public:
-    using JsonASTBase::JsonASTBase;
+    NewExpr(value_t &value) : JsonASTBase(value) { LR_ASSERT(value["id"] == TYPE_NEWEXPR); }
     value_t &getArgs() { return value_["args"]; }
     value_t &getType() { return value_["type"]; }
 };
 class Number : public JsonASTBase {
 public:
-    using JsonASTBase::JsonASTBase;
-    value_t &getValue() { return value_["value"]; }
+    Number(value_t &value) : JsonASTBase(value) { LR_ASSERT(value["id"] == TYPE_NUMBER); }
+    string_t& getString() { return value_["string"].get_ref<string_t&>(); }
 };
 class OverloadOperator : public JsonASTBase {
 public:
-    using JsonASTBase::JsonASTBase;
+    OverloadOperator(value_t &value) : JsonASTBase(value) { LR_ASSERT(value["id"] == TYPE_OVERLOADOPERATOR); }
     value_t &getBlock() { return value_["block"]; }
     value_t &getOp() { return value_["op"]; }
     value_t &getParams() { return value_["params"]; }
@@ -420,18 +429,18 @@ public:
 };
 class Param : public JsonASTBase {
 public:
-    using JsonASTBase::JsonASTBase;
+    Param(value_t &value) : JsonASTBase(value) { LR_ASSERT(value["id"] == TYPE_PARAM); }
     value_t &getName() { return value_["name"]; }
     value_t &getType() { return value_["type"]; }
 };
 class Program : public JsonASTBase {
 public:
-    using JsonASTBase::JsonASTBase;
+    Program(value_t &value) : JsonASTBase(value) { LR_ASSERT(value["id"] == TYPE_PROGRAM); }
     value_t &getValue() { return value_["value"]; }
 };
 class ReadPropertyDeclare : public JsonASTBase {
 public:
-    using JsonASTBase::JsonASTBase;
+    ReadPropertyDeclare(value_t &value) : JsonASTBase(value) { LR_ASSERT(value["id"] == TYPE_READPROPERTYDECLARE); }
     value_t &getBlock() { return value_["block"]; }
     value_t &getName() { return value_["name"]; }
     bool getPublic() { return value_["public"].get<bool>(); }
@@ -439,49 +448,48 @@ public:
 };
 class ReturnStmt : public JsonASTBase {
 public:
-    using JsonASTBase::JsonASTBase;
+    ReturnStmt(value_t &value) : JsonASTBase(value) { LR_ASSERT(value["id"] == TYPE_RETURNSTMT); }
     value_t &getValue() { return value_["value"]; }
 };
 class String : public JsonASTBase {
 public:
-    using JsonASTBase::JsonASTBase;
-    value_t &getValue() { return value_["value"]; }
+    String(value_t &value) : JsonASTBase(value) { LR_ASSERT(value["id"] == TYPE_STRING); }
+    string_t& getString() { return value_["string"].get_ref<string_t&>(); }
 };
 class SwitchStmt : public JsonASTBase {
 public:
-    using JsonASTBase::JsonASTBase;
+    SwitchStmt(value_t &value) : JsonASTBase(value) { LR_ASSERT(value["id"] == TYPE_SWITCHSTMT); }
     value_t &getCases() { return value_["cases"]; }
     value_t &getCondition() { return value_["condition"]; }
     value_t &getDefault() { return value_["default"]; }
 };
 class TernaryExpr : public JsonASTBase {
 public:
-    using JsonASTBase::JsonASTBase;
+    TernaryExpr(value_t &value) : JsonASTBase(value) { LR_ASSERT(value["id"] == TYPE_TERNARYEXPR); }
     value_t &getCondition() { return value_["condition"]; }
     value_t &getLeft() { return value_["left"]; }
     value_t &getRight() { return value_["right"]; }
 };
 class TypeCast : public JsonASTBase {
 public:
-    using JsonASTBase::JsonASTBase;
+    TypeCast(value_t &value) : JsonASTBase(value) { LR_ASSERT(value["id"] == TYPE_TYPECAST); }
     value_t &getCast_to() { return value_["cast_to"]; }
     value_t &getValue() { return value_["value"]; }
 };
 class TypeSpecifier : public JsonASTBase {
 public:
-    using JsonASTBase::JsonASTBase;
+    TypeSpecifier(value_t &value) : JsonASTBase(value) { LR_ASSERT(value["id"] == TYPE_TYPESPECIFIER); }
     value_t &getArgs() { return value_["args"]; }
     value_t &getType() { return value_["type"]; }
 };
 class Unsigned : public JsonASTBase {
 public:
-    using JsonASTBase::JsonASTBase;
-    bool getUnsigned() { return value_["unsigned"].get<bool>(); }
+    Unsigned(value_t &value) : JsonASTBase(value) { LR_ASSERT(value["id"] == TYPE_UNSIGNED); }
     value_t &getValue() { return value_["value"]; }
 };
 class VariableDeclare : public JsonASTBase {
 public:
-    using JsonASTBase::JsonASTBase;
+    VariableDeclare(value_t &value) : JsonASTBase(value) { LR_ASSERT(value["id"] == TYPE_VARIABLEDECLARE); }
     value_t &getInit() { return value_["init"]; }
     value_t &getName() { return value_["name"]; }
     bool getPublic() { return value_["public"].get<bool>(); }
@@ -490,18 +498,18 @@ public:
 };
 class VariableExpr : public JsonASTBase {
 public:
-    using JsonASTBase::JsonASTBase;
+    VariableExpr(value_t &value) : JsonASTBase(value) { LR_ASSERT(value["id"] == TYPE_VARIABLEEXPR); }
     value_t &getName() { return value_["name"]; }
 };
 class WhileStmt : public JsonASTBase {
 public:
-    using JsonASTBase::JsonASTBase;
+    WhileStmt(value_t &value) : JsonASTBase(value) { LR_ASSERT(value["id"] == TYPE_WHILESTMT); }
     value_t &getBody() { return value_["body"]; }
     value_t &getCondition() { return value_["condition"]; }
 };
 class WritePropertyDeclare : public JsonASTBase {
 public:
-    using JsonASTBase::JsonASTBase;
+    WritePropertyDeclare(value_t &value) : JsonASTBase(value) { LR_ASSERT(value["id"] == TYPE_WRITEPROPERTYDECLARE); }
     value_t &getBlock() { return value_["block"]; }
     value_t &getName() { return value_["name"]; }
     value_t &getParams() { return value_["params"]; }
@@ -609,130 +617,130 @@ struct Visitor {
                 LR_UNREACHED();
         }
     }
-    RetTy visitAccessExpr(AccessExpr value) {
+    LR_TYPESPEC(RetTy) visitAccessExpr(AccessExpr value) {
         return RetTy();
     }
-    RetTy visitArrowExpr(ArrowExpr value) {
+    LR_TYPESPEC(RetTy) visitArrowExpr(ArrowExpr value) {
         return RetTy();
     }
-    RetTy visitAssignExpr(AssignExpr value) {
+    LR_TYPESPEC(RetTy) visitAssignExpr(AssignExpr value) {
         return RetTy();
     }
-    RetTy visitBin(Bin value) {
+    LR_TYPESPEC(RetTy) visitBin(Bin value) {
         return RetTy();
     }
-    RetTy visitBinaryExpr(BinaryExpr value) {
+    LR_TYPESPEC(RetTy) visitBinaryExpr(BinaryExpr value) {
         return RetTy();
     }
-    RetTy visitBlockStmt(BlockStmt value) {
+    LR_TYPESPEC(RetTy) visitBlockStmt(BlockStmt value) {
         return RetTy();
     }
-    RetTy visitBreakStmt(BreakStmt value) {
+    LR_TYPESPEC(RetTy) visitBreakStmt(BreakStmt value) {
         return RetTy();
     }
-    RetTy visitCaseStmt(CaseStmt value) {
+    LR_TYPESPEC(RetTy) visitCaseStmt(CaseStmt value) {
         return RetTy();
     }
-    RetTy visitCastMethodDeclare(CastMethodDeclare value) {
+    LR_TYPESPEC(RetTy) visitCastMethodDeclare(CastMethodDeclare value) {
         return RetTy();
     }
-    RetTy visitChar(Char value) {
+    LR_TYPESPEC(RetTy) visitChar(Char value) {
         return RetTy();
     }
-    RetTy visitClassDeclare(ClassDeclare value) {
+    LR_TYPESPEC(RetTy) visitClassDeclare(ClassDeclare value) {
         return RetTy();
     }
-    RetTy visitContinueStmt(ContinueStmt value) {
+    LR_TYPESPEC(RetTy) visitContinueStmt(ContinueStmt value) {
         return RetTy();
     }
-    RetTy visitDoWhileStmt(DoWhileStmt value) {
+    LR_TYPESPEC(RetTy) visitDoWhileStmt(DoWhileStmt value) {
         return RetTy();
     }
-    RetTy visitDotExpr(DotExpr value) {
+    LR_TYPESPEC(RetTy) visitDotExpr(DotExpr value) {
         return RetTy();
     }
-    RetTy visitError(Error value) {
+    LR_TYPESPEC(RetTy) visitError(Error value) {
         return RetTy();
     }
-    RetTy visitExprStmt(ExprStmt value) {
+    LR_TYPESPEC(RetTy) visitExprStmt(ExprStmt value) {
         return RetTy();
     }
-    RetTy visitFieldDeclare(FieldDeclare value) {
+    LR_TYPESPEC(RetTy) visitFieldDeclare(FieldDeclare value) {
         return RetTy();
     }
-    RetTy visitFloat(Float value) {
+    LR_TYPESPEC(RetTy) visitFloat(Float value) {
         return RetTy();
     }
-    RetTy visitFunctionDeclare(FunctionDeclare value) {
+    LR_TYPESPEC(RetTy) visitFunctionDeclare(FunctionDeclare value) {
         return RetTy();
     }
-    RetTy visitHex(Hex value) {
+    LR_TYPESPEC(RetTy) visitHex(Hex value) {
         return RetTy();
     }
-    RetTy visitIfStmt(IfStmt value) {
+    LR_TYPESPEC(RetTy) visitIfStmt(IfStmt value) {
         return RetTy();
     }
-    RetTy visitImport(Import value) {
+    LR_TYPESPEC(RetTy) visitImport(Import value) {
         return RetTy();
     }
-    RetTy visitInvokeExpr(InvokeExpr value) {
+    LR_TYPESPEC(RetTy) visitInvokeExpr(InvokeExpr value) {
         return RetTy();
     }
-    RetTy visitLong(Long value) {
+    LR_TYPESPEC(RetTy) visitLong(Long value) {
         return RetTy();
     }
-    RetTy visitMethodDeclare(MethodDeclare value) {
+    LR_TYPESPEC(RetTy) visitMethodDeclare(MethodDeclare value) {
         return RetTy();
     }
-    RetTy visitNewExpr(NewExpr value) {
+    LR_TYPESPEC(RetTy) visitNewExpr(NewExpr value) {
         return RetTy();
     }
-    RetTy visitNumber(Number value) {
+    LR_TYPESPEC(RetTy) visitNumber(Number value) {
         return RetTy();
     }
-    RetTy visitOverloadOperator(OverloadOperator value) {
+    LR_TYPESPEC(RetTy) visitOverloadOperator(OverloadOperator value) {
         return RetTy();
     }
-    RetTy visitParam(Param value) {
+    LR_TYPESPEC(RetTy) visitParam(Param value) {
         return RetTy();
     }
-    RetTy visitProgram(Program value) {
+    LR_TYPESPEC(RetTy) visitProgram(Program value) {
         return RetTy();
     }
-    RetTy visitReadPropertyDeclare(ReadPropertyDeclare value) {
+    LR_TYPESPEC(RetTy) visitReadPropertyDeclare(ReadPropertyDeclare value) {
         return RetTy();
     }
-    RetTy visitReturnStmt(ReturnStmt value) {
+    LR_TYPESPEC(RetTy) visitReturnStmt(ReturnStmt value) {
         return RetTy();
     }
-    RetTy visitString(String value) {
+    LR_TYPESPEC(RetTy) visitString(String value) {
         return RetTy();
     }
-    RetTy visitSwitchStmt(SwitchStmt value) {
+    LR_TYPESPEC(RetTy) visitSwitchStmt(SwitchStmt value) {
         return RetTy();
     }
-    RetTy visitTernaryExpr(TernaryExpr value) {
+    LR_TYPESPEC(RetTy) visitTernaryExpr(TernaryExpr value) {
         return RetTy();
     }
-    RetTy visitTypeCast(TypeCast value) {
+    LR_TYPESPEC(RetTy) visitTypeCast(TypeCast value) {
         return RetTy();
     }
-    RetTy visitTypeSpecifier(TypeSpecifier value) {
+    LR_TYPESPEC(RetTy) visitTypeSpecifier(TypeSpecifier value) {
         return RetTy();
     }
-    RetTy visitUnsigned(Unsigned value) {
+    LR_TYPESPEC(RetTy) visitUnsigned(Unsigned value) {
         return RetTy();
     }
-    RetTy visitVariableDeclare(VariableDeclare value) {
+    LR_TYPESPEC(RetTy) visitVariableDeclare(VariableDeclare value) {
         return RetTy();
     }
-    RetTy visitVariableExpr(VariableExpr value) {
+    LR_TYPESPEC(RetTy) visitVariableExpr(VariableExpr value) {
         return RetTy();
     }
-    RetTy visitWhileStmt(WhileStmt value) {
+    LR_TYPESPEC(RetTy) visitWhileStmt(WhileStmt value) {
         return RetTy();
     }
-    RetTy visitWritePropertyDeclare(WritePropertyDeclare value) {
+    LR_TYPESPEC(RetTy) visitWritePropertyDeclare(WritePropertyDeclare value) {
         return RetTy();
     }
 };
@@ -743,9 +751,12 @@ inline void HandleReduceAction(ReduceAction &action, std::vector<value_t> &arr, 
         default:
             LR_UNREACHED();
         case OpcodeCreateObj:
-            arr.push_back(value_t::object_t(
-                    {{"kind", value_t::string_t(action.value)},
-                     {"id", value_t::number_integer_t(action.index)}}));
+            if (action.index)
+                arr.push_back(value_t::object_t(
+                        {{"kind", value_t::string_t(action.value)},
+                         {"id",   value_t::number_integer_t(action.index)}}));
+            else
+                arr.push_back(value_t::object_t());
             break;
         case OpcodeCreateArr:
             arr.push_back(value_t::array_t());
@@ -789,7 +800,9 @@ inline void HandleReduceAction(ReduceAction &action, std::vector<value_t> &arr, 
     }
 }
 
-template<class iter_t = const char *, class char_t = typename std::iterator_traits<iter_t>::value_type, class char_traits = std::char_traits<char_t>>
+template<class iter_t = const char *,
+        class char_t = typename std::iterator_traits<iter_t>::value_type,
+        class char_traits = std::char_traits<char_t>>
 class LRParser {
 public:
     using Lexer = ParserLexer<iter_t>;
