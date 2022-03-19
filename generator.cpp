@@ -98,6 +98,18 @@ std::string parser_emit_symbols(LALRGenerator &generator) {
 }
 std::string parser_emit_action(LALRGenerator &generator) {
     std::stringstream out;
+
+    if (generator.grammar.merge_create && generator.grammar.merge_insert) {
+        out << "\nint ParserMergeCreate = " << generator.grammar.merge_create->index << ";\n";
+        out << "int ParserMergeCreateCount = " << generator.grammar.merge_create->size() << ";\n";
+        out << "int ParserMergeInsert = " << generator.grammar.merge_insert->index << ";\n";
+        out << "int ParserMergeInsertCount = " << generator.grammar.merge_insert->size() << ";\n\n";
+    } else {
+        out << "\nint ParserMergeCreate = 0;\n";
+        out << "int ParserMergeCreateCount = 0;\n";
+        out << "int ParserMergeInsert = 0;\n";
+        out << "int ParserMergeInsertCount = 0;\n\n";
+    }
     out << "ReduceAction ParserActions[] = {\n";
     for (auto &action : generator.get_actions()) {
         for (auto &inst: action->insts) {
@@ -534,7 +546,8 @@ public:
                         os << "    " << "value_t &";
                         os << output << "() { return value_[\"" << field << "\"]; }\n";
                     } else if (field_type.back() == '&') { // get_ref
-                        os << "    " << field_type << " ";
+                        field_type = field_type.substr(0, field_type.size() - 1) + " &";
+                        os << "    " << field_type;
                         os << output << "() { return value_[\"" << field << "\"].get_ref<" << field_type << ">(); }\n";
                     } else { // get
                         os << "    " << field_type << " ";
@@ -835,6 +848,11 @@ public:
 };
 )cpp" << std::endl;
 
+        os << "extern int ParserMergeCreate;\n";
+        os << "extern int ParserMergeCreateCount;\n";
+        os << "extern int ParserMergeInsert;\n";
+        os << "extern int ParserMergeInsertCount;\n\n";
+
         // GLRParser
         os << R"cpp(template <class iter_t = const char *,
         class char_t = typename std::iterator_traits<iter_t>::value_type,
@@ -859,6 +877,7 @@ class GLRParser {
         int depth = 0;
         int merge = 0;
         bool error = false;
+        ParserGraphNode() {}
         ParserGraphNode(ParserState *state) : state(state) {}
         ParserGraphNode(ParserState *state, const NodePtr &prev) : state(state), prevs({prev}) {}
         void add_prev(const NodePtr &previous) {
@@ -1051,12 +1070,43 @@ public:
         DFS(start, trans->reduce_length);
     }
     void do_merge(NodePtr node, value_t &value) {
+        struct Getter {
+            NodePtr node;
+            Node inner;
+            Getter(NodePtr node, value_t &value) : node(node) {
+                inner.lexeme = node->lexeme;
+                inner.value = std::move(value);
+            }
+            inline Node &operator[](size_t index) {
+                if (index == 0) {
+                    return *node;
+                }
+                return inner;
+            }
+        } getter{node, value};
+
+        values.clear();
         if (node->merge) {
-            node->value["value"].push_back(std::move(value));
+            if (ParserMergeInsertCount) {
+                for (auto i = ParserMergeInsert; i < ParserMergeInsert + ParserMergeInsertCount; ++i) {
+                    HandleReduceAction(ParserActions[i], values, getter);
+                }
+                node->value = std::move(values.back());
+            } else {
+                node->value["value"].push_back(std::move(value));
+            }
         } else {
-            value_t merge = {{"kind",  "merge"},
-                             {"value", value_t::array({std::move(node->value), value})}};
-            node->value = std::move(merge);
+            if (ParserMergeCreateCount) {
+                for (auto i = ParserMergeCreate; i < ParserMergeCreate + ParserMergeCreateCount; ++i) {
+                    auto &Re = ParserActions[i];
+                    HandleReduceAction(ParserActions[i], values, getter);
+                }
+                node->value = std::move(values.back());
+            } else {
+                value_t merge = {{"kind",  "merge"},
+                                 {"value", value_t::array({std::move(node->value), value})}};
+                node->value = std::move(merge);
+            }
         }
         node->merge++;
     }
@@ -1065,9 +1115,9 @@ public:
         if (!node->error) {
             // there is error state, goto error state
             node = Node::Create(node->state->error->state, node);
-            node->symbol = 2;
+            node->symbol = node->state->error->symbol;
             node->value = value_t::array();
-            node->lexeme = "error";
+            node->lexeme = ParserSymbols[node->symbol].text;
             node->location = lexer_.location();
             node->error = true;
             node->depth = node->depth + 1;

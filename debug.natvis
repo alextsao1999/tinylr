@@ -61,7 +61,6 @@
     <Type Name="ParserGraphNode&lt;*&gt;">
         <DisplayString>{{ Symbol = {ParserSymbols[symbol].text}, Lexeme = {lexeme}, State = {state} }}</DisplayString>
         <Expand>
-            <Item Name="[Prev]">prev</Item>
             <Item Name="[Prevs]">prevs</Item>
             <Item Name="[State]">state</Item>
             <Item Name="[Symbol]">ParserSymbols[symbol].text</Item>
@@ -69,8 +68,7 @@
             <Item Name="[Value]">value</Item>
             <Item Name="[Depth]">depth</Item>
             <Item Name="[Merge]">merge</Item>
-            <Item Name="[Line]">line</Item>
-            <Item Name="[column]">column</Item>
+            <Item Name="[Location]">location</Item>
         </Expand>
     </Type>
     <Type Name="std::pair&lt;*&gt;">

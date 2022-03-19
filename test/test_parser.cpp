@@ -34,20 +34,17 @@ struct MyVisitor : public Visitor<MyVisitor> {
 };
 
 int main() {
-    const char *string = "import aaa.bbb.ccc;\n"
-                         "int<int, value> main() {\n"
-                         "  a = 1 + 2 + 5;\n"
+    const char *string = "int main() {"
+                         " a < b > c;"
                          "}";
 
-    GLRParser<> parser(true);
+    GLRParser<> parser(false);
     parser.reset(string, string + strlen(string));
     parser.parse();
-
-    if (parser.accept()) {
-        auto value = parser.value();
-        //MyVisitor visitor;
-        //visitor.visit(value);
-        std::cout << value.dump(4) << std::endl;
-    }
+    assert(parser.accept());
+    auto value = std::move(parser.value());
+    //MyVisitor visitor;
+    //visitor.visit(value);
+    std::cout << value.dump(4) << std::endl;
     return 0;
 }

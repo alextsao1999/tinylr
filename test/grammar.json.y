@@ -1,10 +1,14 @@
 %right '=';
-%left '||' '&&' '==' '<' '>' '+' '-' '*' '/' '->' ;
+%left '||' '&&' '==' '!=' '<' '<=' '>' '>=' '+' '-' '*' '/' '->' ;
 %right ':' '?';
 %none '(' ')' ;
 %right 'else' ;
+%left '.';
 %whitespace "[ \n\r]+";
 %start programs;
+
+%merge-create @Merge {value: [$1, $2], syms: @1};
+%merge-insert @Merge $1{value: #2};
 
 programs -> programs program @Program $1{value:#2}
           | program @Program {value: [$1]};
@@ -13,7 +17,6 @@ program -> function_declare $1
          | class_declare $1
          | variable_declare $1
          | import $1
-         | stmt $1
          ;
 
 import -> 'import' import_items ';' @Import {items:$2};
@@ -26,8 +29,8 @@ import_item -> identifier $1
              | error @Error{content:'error import content', value:$1}
              ;
 
-class_declare -> 'class' identifier template super '{' classbody '}'
-	@ClassDeclare{@string_t& name: $2, template:$3, super:$4, body:$6};
+class_declare -> 'class' identifier template super '{' classbody '}' @ClassDeclare{@string_t& name: $2, template:$3, super:$4, body:$6}
+	|  'class' identifier template super '{' '}' @ClassDeclare{@string_t& name: $2, template:$3, super:$4, body:[]};
 
 super -> ':' identifier $2
        |
@@ -36,17 +39,18 @@ super -> ':' identifier $2
 template -> '<' template_args '>' $2
           |
           ;
-template_args -> template_args ',' identifier $1[$3]
-               | identifier [$1]
+template_args -> template_args ',' type $1[$3]
+               | type [$1]
+               |
                ;
 
 classbody  -> classbody classmember $1[$2]
-            | classmember [$1];
+            | classmember [$1]
+            ;
 
-classmember -> variable_declare @FieldDeclare $1
-             | function_declare @MethodDeclare $1
+classmember -> variable_declare $1
+             | function_declare $1
              | cast_method_declare $1
-             | overload $1
              | property $1
              ;
 cast_method_declare -> type block @CastMethodDeclare{type:$1, block:$2};
@@ -56,26 +60,6 @@ property -> type identifier block @ReadPropertyDeclare{type:$1, name:$2, block:$
           | 'public' property $2{public:true}
           | 'private' property $2{public:false}
           ;
-
-overload -> overload_op '(' params ')' block @OverloadOperator{op:$1, params:$3, block:$5}
-          | overload_op '(' params ')' '->' type block @OverloadOperator{op:$1, params:$3, type:$6, block:$7}
-          ;
-
-overload_op -> '[' ']' @1
-             | '(' ')' @1
-             | '+' @1
-             | '-' @1
-             | '*' @1
-             | '/' @1
-             | '<' @1
-             | '>' @1
-             | '++' @1
-             | '--' @1
-             | '==' @1
-             | '->' @1
-             | '<<' @1
-             | '>>' @1
-             ;
 
 function_declare -> type identifier '(' params ')' block @FunctionDeclare{type:$1, name:$2, params:$4, block:$6}
         | 'public' function_declare @FunctionDeclare $2{public:true}
@@ -112,7 +96,7 @@ stmt   -> expr ';' @ExprStmt{value:$1}
         ;
 
 if_stmt -> 'if' '(' expr ')' stmt @IfStmt{condition:$3, then:$5}
-         | 'if' '(' expr ')' stmt 'else' stmt @IfStmt{condition:$3, then:$5, else:$7}
+         | 'if' '(' expr ')' stmt 'else' stmt @IfElseStmt{condition:$3, then:$5, else:$7}
          ;
 
 while_stmt -> 'while' '(' expr ')' stmt @WhileStmt{condition:$3, body:$5};
@@ -128,10 +112,10 @@ default -> 'default' ':' stmts $3
          |
          ;
 
-lhs -> variable $1
-     | dot $1
-     | array $1
-     ;
+lvalue -> variable $1
+	| dot $1
+	| array $1
+	;
 
 variable_declare -> type identifier ';' @VariableDeclare{type:$1, name:$2}
         | type identifier '=' expr ';' @VariableDeclare{type:$1, name:$2, init:$4}
@@ -147,17 +131,20 @@ type_args -> type [$1]
            | type_args ',' type $1[$3]
            ;
 
-expr -> expr '<' expr @BinaryExpr{left:$1, op:@2, right:$3}
+expr -> expr '<' expr @BinaryExpr{left:$1, @string_t& op:@2, right:$3}
       | expr '>' expr @BinaryExpr{left:$1, op:@2, right:$3}
       | expr '+' expr @BinaryExpr{left:$1, op:@2, right:$3}
       | expr '-' expr @BinaryExpr{left:$1, op:@2, right:$3}
       | expr '*' expr @BinaryExpr{left:$1, op:@2, right:$3}
       | expr '/' expr @BinaryExpr{left:$1, op:@2, right:$3}
       | expr '==' expr @BinaryExpr{left:$1, op:@2, right:$3}
+      | expr '>=' expr @BinaryExpr{left:$1, op:@2, right:$3}
+      | expr '<=' expr @BinaryExpr{left:$1, op:@2, right:$3}
+      | expr '!=' expr @BinaryExpr{left:$1, op:@2, right:$3}
       | expr '&&' expr @BinaryExpr{left:$1, op:@2, right:$3}
       | expr '||' expr @BinaryExpr{left:$1, op:@2, right:$3}
       | expr '?' expr ':' expr @TernaryExpr{condition:$1, left:$3, right:$5}
-      | expr '=' expr @AssignExpr{left:$1, right:$3}
+      | lvalue '=' expr @AssignExpr{left: $1{isLeft: true}, right:$3}
       | '(' params ')' '->' block @ArrowExpr{params:$2, block:$5}
       | '(' type ')' expr @TypeCast{cast_to:$2, value:$4}
       | '(' expr ')' $2
@@ -166,15 +153,13 @@ expr -> expr '<' expr @BinaryExpr{left:$1, op:@2, right:$3}
 
 primary -> literal $1
          | invoke $1
-         | variable $1
-         | dot $1
-         | array $1
+         | lvalue $1
          | 'new' type '(' args ')' @NewExpr{type:$2, args:$4}
          ;
 
-variable -> identifier @VariableExpr{name:$1};
-dot   -> expr '.' identifier @DotExpr{lhs:$1, field:$3};
-array -> expr '[' expr ']' @AccessExpr{lhs:$1, field:$3};
+variable -> identifier @VariableExpr{name:$1, isLeft: false};
+dot   -> expr '.' identifier @DotExpr{lhs:$1, field:$3, isLeft: false};
+array -> expr '[' expr ']' @AccessExpr{lhs:$1, field:$3, isLeft: false};
 invoke -> identifier '(' args ')' @InvokeExpr{name:$1, args:$3};
 
 args   -> args ',' expr $1[$3]
@@ -182,14 +167,14 @@ args   -> args ',' expr $1[$3]
         |
         ;
 
-literal -> "\".*\"" @String{@string_t& string:@1}
-         | "[0-9]+" @Number{@string_t& string:@1}
-         | "[0-9]+\.[0-9]*f?" @Float{value:@1}
-         | "[0-9]+u" @Unsigned{value:@1}
-         | "[0-9]+L" @Long{value:@1}
-         | "0x[0-9A-F]+" @Hex{value:@1}
-         | "0b[0-1]+" @Bin{value:@1}
-         | "'(.|\\\\.)'" @Char{value:@1}
+literal -> "\".*\"" @StringLiteral{@string_t& string: @1}
+         | "[0-9]+" @IntegerLiteral{@string_t& string: @1}
+         | "[0-9]+\.[0-9]*f?" @FloatLiteral{@string_t& string: @1}
+         | "[0-9]+u" @UnsignedLiteral{@string_t& string: @1}
+         | "[0-9]+L" @LongLiteral{@string_t& string: @1}
+         | "0x[0-9A-F]+" @HexLiteral{@string_t& string: @1}
+         | "0b[0-1]+" @BinLiteral{@string_t& string: @1}
+         | "'(.|\\\\.)'" @CharLiteral{@string_t& string: @1}
          ;
 
 identifier -> "[a-zA-Z_][a-zA-Z0-9_]*" @1;

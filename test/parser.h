@@ -13,7 +13,7 @@
 
 #define LR_ASSERT(x) assert(x)
 #define LR_UNREACHED() assert(!"unreached here")
-#define LR_TYPESPEC(TYPE) inline TYPE
+#define LR_TYPESPEC(TYPE) TYPE
 
 #define CONFLICT_NONE 0
 #define CONFLICT_SHIFT_REDUCE 1
@@ -205,48 +205,47 @@ using value_t = nlohmann::json;
 
 enum {
     TYPE_NONE = 0,
-    TYPE_ACCESSEXPR = 33,
-    TYPE_ARROWEXPR = 28,
-    TYPE_ASSIGNEXPR = 27,
-    TYPE_BIN = 41,
-    TYPE_BINARYEXPR = 25,
-    TYPE_BLOCKSTMT = 14,
-    TYPE_BREAKSTMT = 17,
-    TYPE_CASESTMT = 22,
-    TYPE_CASTMETHODDECLARE = 7,
-    TYPE_CHAR = 42,
-    TYPE_CLASSDECLARE = 4,
-    TYPE_CONTINUESTMT = 16,
-    TYPE_DOWHILESTMT = 20,
-    TYPE_DOTEXPR = 32,
-    TYPE_ERROR = 3,
-    TYPE_EXPRSTMT = 13,
-    TYPE_FIELDDECLARE = 5,
-    TYPE_FLOAT = 37,
-    TYPE_FUNCTIONDECLARE = 11,
-    TYPE_HEX = 40,
-    TYPE_IFSTMT = 18,
-    TYPE_IMPORT = 2,
-    TYPE_INVOKEEXPR = 34,
-    TYPE_LONG = 39,
-    TYPE_METHODDECLARE = 6,
-    TYPE_NEWEXPR = 30,
-    TYPE_NUMBER = 36,
-    TYPE_OVERLOADOPERATOR = 10,
-    TYPE_PARAM = 12,
-    TYPE_PROGRAM = 1,
-    TYPE_READPROPERTYDECLARE = 8,
-    TYPE_RETURNSTMT = 15,
-    TYPE_STRING = 35,
-    TYPE_SWITCHSTMT = 21,
-    TYPE_TERNARYEXPR = 26,
-    TYPE_TYPECAST = 29,
-    TYPE_TYPESPECIFIER = 24,
-    TYPE_UNSIGNED = 38,
-    TYPE_VARIABLEDECLARE = 23,
-    TYPE_VARIABLEEXPR = 31,
-    TYPE_WHILESTMT = 19,
-    TYPE_WRITEPROPERTYDECLARE = 9,
+    TYPE_ACCESSEXPR = 32,
+    TYPE_ARROWEXPR = 27,
+    TYPE_ASSIGNEXPR = 26,
+    TYPE_BINLITERAL = 40,
+    TYPE_BINARYEXPR = 24,
+    TYPE_BLOCKSTMT = 12,
+    TYPE_BREAKSTMT = 15,
+    TYPE_CASESTMT = 21,
+    TYPE_CASTMETHODDECLARE = 6,
+    TYPE_CHARLITERAL = 41,
+    TYPE_CLASSDECLARE = 5,
+    TYPE_CONTINUESTMT = 14,
+    TYPE_DOWHILESTMT = 19,
+    TYPE_DOTEXPR = 31,
+    TYPE_ERROR = 4,
+    TYPE_EXPRSTMT = 11,
+    TYPE_FLOATLITERAL = 36,
+    TYPE_FUNCTIONDECLARE = 9,
+    TYPE_HEXLITERAL = 39,
+    TYPE_IFELSESTMT = 17,
+    TYPE_IFSTMT = 16,
+    TYPE_IMPORT = 3,
+    TYPE_INTEGERLITERAL = 35,
+    TYPE_INVOKEEXPR = 33,
+    TYPE_LONGLITERAL = 38,
+    TYPE_MERGE = 1,
+    TYPE_NEWEXPR = 29,
+    TYPE_PARAM = 10,
+    TYPE_PROGRAM = 2,
+    TYPE_READPROPERTYDECLARE = 7,
+    TYPE_RETURNSTMT = 13,
+    TYPE_STRINGLITERAL = 34,
+    TYPE_SWITCHSTMT = 20,
+    TYPE_TERNARYEXPR = 25,
+    TYPE_TYPECAST = 28,
+    TYPE_TYPESPECIFIER = 23,
+    TYPE_UNSIGNEDLITERAL = 37,
+    TYPE_VARIABLEDECLARE = 22,
+    TYPE_VARIABLEEXPR = 30,
+    TYPE_WHILESTMT = 18,
+    TYPE_WRITEPROPERTYDECLARE = 8,
 };
 class JsonASTBase {
 protected:
@@ -268,6 +267,7 @@ class AccessExpr : public JsonASTBase {
 public:
     AccessExpr(value_t &value) : JsonASTBase(value) { LR_ASSERT(value["id"] == TYPE_ACCESSEXPR); }
     value_t &getField() { return value_["field"]; }
+    bool getIsLeft() { return value_["isLeft"].get<bool>(); }
     value_t &getLhs() { return value_["lhs"]; }
 };
 class ArrowExpr : public JsonASTBase {
@@ -282,16 +282,16 @@ public:
     value_t &getLeft() { return value_["left"]; }
     value_t &getRight() { return value_["right"]; }
 };
-class Bin : public JsonASTBase {
+class BinLiteral : public JsonASTBase {
 public:
-    Bin(value_t &value) : JsonASTBase(value) { LR_ASSERT(value["id"] == TYPE_BIN); }
-    value_t &getValue() { return value_["value"]; }
+    BinLiteral(value_t &value) : JsonASTBase(value) { LR_ASSERT(value["id"] == TYPE_BINLITERAL); }
+    string_t &getString() { return value_["string"].get_ref<string_t &>(); }
 };
 class BinaryExpr : public JsonASTBase {
 public:
     BinaryExpr(value_t &value) : JsonASTBase(value) { LR_ASSERT(value["id"] == TYPE_BINARYEXPR); }
     value_t &getLeft() { return value_["left"]; }
-    value_t &getOp() { return value_["op"]; }
+    string_t &getOp() { return value_["op"].get_ref<string_t &>(); }
     value_t &getRight() { return value_["right"]; }
 };
 class BlockStmt : public JsonASTBase {
@@ -316,16 +316,16 @@ public:
     value_t &getBlock() { return value_["block"]; }
     value_t &getType() { return value_["type"]; }
 };
-class Char : public JsonASTBase {
+class CharLiteral : public JsonASTBase {
 public:
-    Char(value_t &value) : JsonASTBase(value) { LR_ASSERT(value["id"] == TYPE_CHAR); }
-    value_t &getValue() { return value_["value"]; }
+    CharLiteral(value_t &value) : JsonASTBase(value) { LR_ASSERT(value["id"] == TYPE_CHARLITERAL); }
+    string_t &getString() { return value_["string"].get_ref<string_t &>(); }
 };
 class ClassDeclare : public JsonASTBase {
 public:
     ClassDeclare(value_t &value) : JsonASTBase(value) { LR_ASSERT(value["id"] == TYPE_CLASSDECLARE); }
     value_t &getBody() { return value_["body"]; }
-    string_t& getName() { return value_["name"].get_ref<string_t&>(); }
+    string_t &getName() { return value_["name"].get_ref<string_t &>(); }
     value_t &getSuper() { return value_["super"]; }
     value_t &getTemplate() { return value_["template"]; }
 };
@@ -343,12 +343,13 @@ class DotExpr : public JsonASTBase {
 public:
     DotExpr(value_t &value) : JsonASTBase(value) { LR_ASSERT(value["id"] == TYPE_DOTEXPR); }
     value_t &getField() { return value_["field"]; }
+    bool getIsLeft() { return value_["isLeft"].get<bool>(); }
     value_t &getLhs() { return value_["lhs"]; }
 };
 class Error : public JsonASTBase {
 public:
     Error(value_t &value) : JsonASTBase(value) { LR_ASSERT(value["id"] == TYPE_ERROR); }
-    string_t& getContent() { return value_["content"].get_ref<string_t&>(); }
+    string_t &getContent() { return value_["content"].get_ref<string_t &>(); }
     value_t &getValue() { return value_["value"]; }
 };
 class ExprStmt : public JsonASTBase {
@@ -356,14 +357,10 @@ public:
     ExprStmt(value_t &value) : JsonASTBase(value) { LR_ASSERT(value["id"] == TYPE_EXPRSTMT); }
     value_t &getValue() { return value_["value"]; }
 };
-class FieldDeclare : public JsonASTBase {
+class FloatLiteral : public JsonASTBase {
 public:
-    FieldDeclare(value_t &value) : JsonASTBase(value) { LR_ASSERT(value["id"] == TYPE_FIELDDECLARE); }
-};
-class Float : public JsonASTBase {
-public:
-    Float(value_t &value) : JsonASTBase(value) { LR_ASSERT(value["id"] == TYPE_FLOAT); }
-    value_t &getValue() { return value_["value"]; }
+    FloatLiteral(value_t &value) : JsonASTBase(value) { LR_ASSERT(value["id"] == TYPE_FLOATLITERAL); }
+    string_t &getString() { return value_["string"].get_ref<string_t &>(); }
 };
 class FunctionDeclare : public JsonASTBase {
 public:
@@ -376,16 +373,22 @@ public:
     bool getStatic() { return value_["static"].get<bool>(); }
     value_t &getType() { return value_["type"]; }
 };
-class Hex : public JsonASTBase {
+class HexLiteral : public JsonASTBase {
 public:
-    Hex(value_t &value) : JsonASTBase(value) { LR_ASSERT(value["id"] == TYPE_HEX); }
-    value_t &getValue() { return value_["value"]; }
+    HexLiteral(value_t &value) : JsonASTBase(value) { LR_ASSERT(value["id"] == TYPE_HEXLITERAL); }
+    string_t &getString() { return value_["string"].get_ref<string_t &>(); }
+};
+class IfElseStmt : public JsonASTBase {
+public:
+    IfElseStmt(value_t &value) : JsonASTBase(value) { LR_ASSERT(value["id"] == TYPE_IFELSESTMT); }
+    value_t &getCondition() { return value_["condition"]; }
+    value_t &getElse() { return value_["else"]; }
+    value_t &getThen() { return value_["then"]; }
 };
 class IfStmt : public JsonASTBase {
 public:
     IfStmt(value_t &value) : JsonASTBase(value) { LR_ASSERT(value["id"] == TYPE_IFSTMT); }
     value_t &getCondition() { return value_["condition"]; }
-    value_t &getElse() { return value_["else"]; }
     value_t &getThen() { return value_["then"]; }
 };
 class Import : public JsonASTBase {
@@ -393,38 +396,32 @@ public:
     Import(value_t &value) : JsonASTBase(value) { LR_ASSERT(value["id"] == TYPE_IMPORT); }
     value_t &getItems() { return value_["items"]; }
 };
+class IntegerLiteral : public JsonASTBase {
+public:
+    IntegerLiteral(value_t &value) : JsonASTBase(value) { LR_ASSERT(value["id"] == TYPE_INTEGERLITERAL); }
+    string_t &getString() { return value_["string"].get_ref<string_t &>(); }
+};
 class InvokeExpr : public JsonASTBase {
 public:
     InvokeExpr(value_t &value) : JsonASTBase(value) { LR_ASSERT(value["id"] == TYPE_INVOKEEXPR); }
     value_t &getArgs() { return value_["args"]; }
     value_t &getName() { return value_["name"]; }
 };
-class Long : public JsonASTBase {
+class LongLiteral : public JsonASTBase {
 public:
-    Long(value_t &value) : JsonASTBase(value) { LR_ASSERT(value["id"] == TYPE_LONG); }
-    value_t &getValue() { return value_["value"]; }
+    LongLiteral(value_t &value) : JsonASTBase(value) { LR_ASSERT(value["id"] == TYPE_LONGLITERAL); }
+    string_t &getString() { return value_["string"].get_ref<string_t &>(); }
 };
-class MethodDeclare : public JsonASTBase {
+class Merge : public JsonASTBase {
 public:
-    MethodDeclare(value_t &value) : JsonASTBase(value) { LR_ASSERT(value["id"] == TYPE_METHODDECLARE); }
+    Merge(value_t &value) : JsonASTBase(value) { LR_ASSERT(value["id"] == TYPE_MERGE); }
+    value_t &getSym() { return value_["sym"]; }
+    value_t &getValue() { return value_["value"]; }
 };
 class NewExpr : public JsonASTBase {
 public:
     NewExpr(value_t &value) : JsonASTBase(value) { LR_ASSERT(value["id"] == TYPE_NEWEXPR); }
     value_t &getArgs() { return value_["args"]; }
-    value_t &getType() { return value_["type"]; }
-};
-class Number : public JsonASTBase {
-public:
-    Number(value_t &value) : JsonASTBase(value) { LR_ASSERT(value["id"] == TYPE_NUMBER); }
-    string_t& getString() { return value_["string"].get_ref<string_t&>(); }
-};
-class OverloadOperator : public JsonASTBase {
-public:
-    OverloadOperator(value_t &value) : JsonASTBase(value) { LR_ASSERT(value["id"] == TYPE_OVERLOADOPERATOR); }
-    value_t &getBlock() { return value_["block"]; }
-    value_t &getOp() { return value_["op"]; }
-    value_t &getParams() { return value_["params"]; }
     value_t &getType() { return value_["type"]; }
 };
 class Param : public JsonASTBase {
@@ -451,10 +448,10 @@ public:
     ReturnStmt(value_t &value) : JsonASTBase(value) { LR_ASSERT(value["id"] == TYPE_RETURNSTMT); }
     value_t &getValue() { return value_["value"]; }
 };
-class String : public JsonASTBase {
+class StringLiteral : public JsonASTBase {
 public:
-    String(value_t &value) : JsonASTBase(value) { LR_ASSERT(value["id"] == TYPE_STRING); }
-    string_t& getString() { return value_["string"].get_ref<string_t&>(); }
+    StringLiteral(value_t &value) : JsonASTBase(value) { LR_ASSERT(value["id"] == TYPE_STRINGLITERAL); }
+    string_t &getString() { return value_["string"].get_ref<string_t &>(); }
 };
 class SwitchStmt : public JsonASTBase {
 public:
@@ -482,10 +479,10 @@ public:
     value_t &getArgs() { return value_["args"]; }
     value_t &getType() { return value_["type"]; }
 };
-class Unsigned : public JsonASTBase {
+class UnsignedLiteral : public JsonASTBase {
 public:
-    Unsigned(value_t &value) : JsonASTBase(value) { LR_ASSERT(value["id"] == TYPE_UNSIGNED); }
-    value_t &getValue() { return value_["value"]; }
+    UnsignedLiteral(value_t &value) : JsonASTBase(value) { LR_ASSERT(value["id"] == TYPE_UNSIGNEDLITERAL); }
+    string_t &getString() { return value_["string"].get_ref<string_t &>(); }
 };
 class VariableDeclare : public JsonASTBase {
 public:
@@ -499,6 +496,7 @@ public:
 class VariableExpr : public JsonASTBase {
 public:
     VariableExpr(value_t &value) : JsonASTBase(value) { LR_ASSERT(value["id"] == TYPE_VARIABLEEXPR); }
+    bool getIsLeft() { return value_["isLeft"].get<bool>(); }
     value_t &getName() { return value_["name"]; }
 };
 class WhileStmt : public JsonASTBase {
@@ -535,8 +533,8 @@ struct Visitor {
                 return static_cast<SubTy *>(this)->visitArrowExpr(value);
             case TYPE_ASSIGNEXPR:
                 return static_cast<SubTy *>(this)->visitAssignExpr(value);
-            case TYPE_BIN:
-                return static_cast<SubTy *>(this)->visitBin(value);
+            case TYPE_BINLITERAL:
+                return static_cast<SubTy *>(this)->visitBinLiteral(value);
             case TYPE_BINARYEXPR:
                 return static_cast<SubTy *>(this)->visitBinaryExpr(value);
             case TYPE_BLOCKSTMT:
@@ -547,8 +545,8 @@ struct Visitor {
                 return static_cast<SubTy *>(this)->visitCaseStmt(value);
             case TYPE_CASTMETHODDECLARE:
                 return static_cast<SubTy *>(this)->visitCastMethodDeclare(value);
-            case TYPE_CHAR:
-                return static_cast<SubTy *>(this)->visitChar(value);
+            case TYPE_CHARLITERAL:
+                return static_cast<SubTy *>(this)->visitCharLiteral(value);
             case TYPE_CLASSDECLARE:
                 return static_cast<SubTy *>(this)->visitClassDeclare(value);
             case TYPE_CONTINUESTMT:
@@ -561,30 +559,28 @@ struct Visitor {
                 return static_cast<SubTy *>(this)->visitError(value);
             case TYPE_EXPRSTMT:
                 return static_cast<SubTy *>(this)->visitExprStmt(value);
-            case TYPE_FIELDDECLARE:
-                return static_cast<SubTy *>(this)->visitFieldDeclare(value);
-            case TYPE_FLOAT:
-                return static_cast<SubTy *>(this)->visitFloat(value);
+            case TYPE_FLOATLITERAL:
+                return static_cast<SubTy *>(this)->visitFloatLiteral(value);
             case TYPE_FUNCTIONDECLARE:
                 return static_cast<SubTy *>(this)->visitFunctionDeclare(value);
-            case TYPE_HEX:
-                return static_cast<SubTy *>(this)->visitHex(value);
+            case TYPE_HEXLITERAL:
+                return static_cast<SubTy *>(this)->visitHexLiteral(value);
+            case TYPE_IFELSESTMT:
+                return static_cast<SubTy *>(this)->visitIfElseStmt(value);
             case TYPE_IFSTMT:
                 return static_cast<SubTy *>(this)->visitIfStmt(value);
             case TYPE_IMPORT:
                 return static_cast<SubTy *>(this)->visitImport(value);
+            case TYPE_INTEGERLITERAL:
+                return static_cast<SubTy *>(this)->visitIntegerLiteral(value);
             case TYPE_INVOKEEXPR:
                 return static_cast<SubTy *>(this)->visitInvokeExpr(value);
-            case TYPE_LONG:
-                return static_cast<SubTy *>(this)->visitLong(value);
-            case TYPE_METHODDECLARE:
-                return static_cast<SubTy *>(this)->visitMethodDeclare(value);
+            case TYPE_LONGLITERAL:
+                return static_cast<SubTy *>(this)->visitLongLiteral(value);
+            case TYPE_MERGE:
+                return static_cast<SubTy *>(this)->visitMerge(value);
             case TYPE_NEWEXPR:
                 return static_cast<SubTy *>(this)->visitNewExpr(value);
-            case TYPE_NUMBER:
-                return static_cast<SubTy *>(this)->visitNumber(value);
-            case TYPE_OVERLOADOPERATOR:
-                return static_cast<SubTy *>(this)->visitOverloadOperator(value);
             case TYPE_PARAM:
                 return static_cast<SubTy *>(this)->visitParam(value);
             case TYPE_PROGRAM:
@@ -593,8 +589,8 @@ struct Visitor {
                 return static_cast<SubTy *>(this)->visitReadPropertyDeclare(value);
             case TYPE_RETURNSTMT:
                 return static_cast<SubTy *>(this)->visitReturnStmt(value);
-            case TYPE_STRING:
-                return static_cast<SubTy *>(this)->visitString(value);
+            case TYPE_STRINGLITERAL:
+                return static_cast<SubTy *>(this)->visitStringLiteral(value);
             case TYPE_SWITCHSTMT:
                 return static_cast<SubTy *>(this)->visitSwitchStmt(value);
             case TYPE_TERNARYEXPR:
@@ -603,8 +599,8 @@ struct Visitor {
                 return static_cast<SubTy *>(this)->visitTypeCast(value);
             case TYPE_TYPESPECIFIER:
                 return static_cast<SubTy *>(this)->visitTypeSpecifier(value);
-            case TYPE_UNSIGNED:
-                return static_cast<SubTy *>(this)->visitUnsigned(value);
+            case TYPE_UNSIGNEDLITERAL:
+                return static_cast<SubTy *>(this)->visitUnsignedLiteral(value);
             case TYPE_VARIABLEDECLARE:
                 return static_cast<SubTy *>(this)->visitVariableDeclare(value);
             case TYPE_VARIABLEEXPR:
@@ -626,7 +622,7 @@ struct Visitor {
     LR_TYPESPEC(RetTy) visitAssignExpr(AssignExpr value) {
         return RetTy();
     }
-    LR_TYPESPEC(RetTy) visitBin(Bin value) {
+    LR_TYPESPEC(RetTy) visitBinLiteral(BinLiteral value) {
         return RetTy();
     }
     LR_TYPESPEC(RetTy) visitBinaryExpr(BinaryExpr value) {
@@ -644,7 +640,7 @@ struct Visitor {
     LR_TYPESPEC(RetTy) visitCastMethodDeclare(CastMethodDeclare value) {
         return RetTy();
     }
-    LR_TYPESPEC(RetTy) visitChar(Char value) {
+    LR_TYPESPEC(RetTy) visitCharLiteral(CharLiteral value) {
         return RetTy();
     }
     LR_TYPESPEC(RetTy) visitClassDeclare(ClassDeclare value) {
@@ -665,16 +661,16 @@ struct Visitor {
     LR_TYPESPEC(RetTy) visitExprStmt(ExprStmt value) {
         return RetTy();
     }
-    LR_TYPESPEC(RetTy) visitFieldDeclare(FieldDeclare value) {
-        return RetTy();
-    }
-    LR_TYPESPEC(RetTy) visitFloat(Float value) {
+    LR_TYPESPEC(RetTy) visitFloatLiteral(FloatLiteral value) {
         return RetTy();
     }
     LR_TYPESPEC(RetTy) visitFunctionDeclare(FunctionDeclare value) {
         return RetTy();
     }
-    LR_TYPESPEC(RetTy) visitHex(Hex value) {
+    LR_TYPESPEC(RetTy) visitHexLiteral(HexLiteral value) {
+        return RetTy();
+    }
+    LR_TYPESPEC(RetTy) visitIfElseStmt(IfElseStmt value) {
         return RetTy();
     }
     LR_TYPESPEC(RetTy) visitIfStmt(IfStmt value) {
@@ -683,22 +679,19 @@ struct Visitor {
     LR_TYPESPEC(RetTy) visitImport(Import value) {
         return RetTy();
     }
+    LR_TYPESPEC(RetTy) visitIntegerLiteral(IntegerLiteral value) {
+        return RetTy();
+    }
     LR_TYPESPEC(RetTy) visitInvokeExpr(InvokeExpr value) {
         return RetTy();
     }
-    LR_TYPESPEC(RetTy) visitLong(Long value) {
+    LR_TYPESPEC(RetTy) visitLongLiteral(LongLiteral value) {
         return RetTy();
     }
-    LR_TYPESPEC(RetTy) visitMethodDeclare(MethodDeclare value) {
+    LR_TYPESPEC(RetTy) visitMerge(Merge value) {
         return RetTy();
     }
     LR_TYPESPEC(RetTy) visitNewExpr(NewExpr value) {
-        return RetTy();
-    }
-    LR_TYPESPEC(RetTy) visitNumber(Number value) {
-        return RetTy();
-    }
-    LR_TYPESPEC(RetTy) visitOverloadOperator(OverloadOperator value) {
         return RetTy();
     }
     LR_TYPESPEC(RetTy) visitParam(Param value) {
@@ -713,7 +706,7 @@ struct Visitor {
     LR_TYPESPEC(RetTy) visitReturnStmt(ReturnStmt value) {
         return RetTy();
     }
-    LR_TYPESPEC(RetTy) visitString(String value) {
+    LR_TYPESPEC(RetTy) visitStringLiteral(StringLiteral value) {
         return RetTy();
     }
     LR_TYPESPEC(RetTy) visitSwitchStmt(SwitchStmt value) {
@@ -728,7 +721,7 @@ struct Visitor {
     LR_TYPESPEC(RetTy) visitTypeSpecifier(TypeSpecifier value) {
         return RetTy();
     }
-    LR_TYPESPEC(RetTy) visitUnsigned(Unsigned value) {
+    LR_TYPESPEC(RetTy) visitUnsignedLiteral(UnsignedLiteral value) {
         return RetTy();
     }
     LR_TYPESPEC(RetTy) visitVariableDeclare(VariableDeclare value) {
@@ -994,6 +987,11 @@ public:
     }
 };
 
+extern int ParserMergeCreate;
+extern int ParserMergeCreateCount;
+extern int ParserMergeInsert;
+extern int ParserMergeInsertCount;
+
 template <class iter_t = const char *,
         class char_t = typename std::iterator_traits<iter_t>::value_type,
         class char_traits = std::char_traits<char_t>>
@@ -1017,6 +1015,7 @@ class GLRParser {
         int depth = 0;
         int merge = 0;
         bool error = false;
+        ParserGraphNode() {}
         ParserGraphNode(ParserState *state) : state(state) {}
         ParserGraphNode(ParserState *state, const NodePtr &prev) : state(state), prevs({prev}) {}
         void add_prev(const NodePtr &previous) {
@@ -1209,12 +1208,43 @@ public:
         DFS(start, trans->reduce_length);
     }
     void do_merge(NodePtr node, value_t &value) {
+        struct Getter {
+            NodePtr node;
+            Node inner;
+            Getter(NodePtr node, value_t &value) : node(node) {
+                inner.lexeme = node->lexeme;
+                inner.value = std::move(value);
+            }
+            inline Node &operator[](size_t index) {
+                if (index == 0) {
+                    return *node;
+                }
+                return inner;
+            }
+        } getter{node, value};
+
+        values.clear();
         if (node->merge) {
-            node->value["value"].push_back(std::move(value));
+            if (ParserMergeInsertCount) {
+                for (auto i = ParserMergeInsert; i < ParserMergeInsert + ParserMergeInsertCount; ++i) {
+                    HandleReduceAction(ParserActions[i], values, getter);
+                }
+                node->value = std::move(values.back());
+            } else {
+                node->value["value"].push_back(std::move(value));
+            }
         } else {
-            value_t merge = {{"kind",  "merge"},
-                             {"value", value_t::array({std::move(node->value), value})}};
-            node->value = std::move(merge);
+            if (ParserMergeCreateCount) {
+                for (auto i = ParserMergeCreate; i < ParserMergeCreate + ParserMergeCreateCount; ++i) {
+                    auto &Re = ParserActions[i];
+                    HandleReduceAction(ParserActions[i], values, getter);
+                }
+                node->value = std::move(values.back());
+            } else {
+                value_t merge = {{"kind",  "merge"},
+                                 {"value", value_t::array({std::move(node->value), value})}};
+                node->value = std::move(merge);
+            }
         }
         node->merge++;
     }
@@ -1223,9 +1253,9 @@ public:
         if (!node->error) {
             // there is error state, goto error state
             node = Node::Create(node->state->error->state, node);
-            node->symbol = 2;
+            node->symbol = node->state->error->symbol;
             node->value = value_t::array();
-            node->lexeme = "error";
+            node->lexeme = ParserSymbols[node->symbol].text;
             node->location = lexer_.location();
             node->error = true;
             node->depth = node->depth + 1;

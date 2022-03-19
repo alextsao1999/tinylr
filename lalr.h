@@ -103,6 +103,9 @@ namespace alex {
         Action *action = nullptr;
         Production(Symbol *lhs) : lhs(lhs) {}
         Production(Symbol *lhs, const std::vector<Symbol *> &symbols) : lhs(lhs), symbols(symbols) {}
+        inline void push_symbol(Symbol *symbol) {
+            symbols.push_back(symbol);
+        }
         Symbol *get_symbol(size_t index) {
             assert(index < symbols.size());
             return symbols[index];
@@ -122,18 +125,18 @@ namespace alex {
             int index = 0;
             for (auto &symbol : symbols) {
                 if (index++ == dot) {
-                    result += "@ ";
+                    result += "[.] ";
                 }
                 result += symbol->to_str();
                 result += " ";
             }
             if (dot >= index) {
-                result += "@";
+                result += "[.]";
             }
             if (symbols.size() > 0) {
-                result += "     line ";
+                result += "     line:";
                 result += std::to_string(symbols[0]->line + 1);
-                result += " column ";
+                result += " column:";
                 result += std::to_string(symbols[0]->column + 1);
             }
             return result;
@@ -185,7 +188,7 @@ namespace alex {
             std::string_view result = pattern;
             result.remove_prefix(1);
             result.remove_suffix(1);
-            return std::string(result);
+            return "`" + std::string(result) + "`";
         }
     };
 
@@ -259,8 +262,8 @@ namespace alex {
         int index = 0;
         bool visited = false;
         const GrammarTransition *error = nullptr;
-        std::set<GrammarItem> items; // Item set
-        std::multiset<GrammarTransition> transitions;
+        std::set<GrammarItem> items; ///< item set
+        std::multiset<GrammarTransition> transitions; ///< generated transitions
         ConflictType conflict = ConflictNone;
         GrammarState() = default;
         GrammarState(const std::set<GrammarItem> &items) : items(std::move(items)) {}
@@ -297,6 +300,10 @@ namespace alex {
         Nonterminal *error = nullptr;
         Symbol *whitespace = nullptr;
 
+        /// merge actions when comes to conflict
+        Action *merge_create = nullptr;
+        Action *merge_insert = nullptr;
+
         TypeInfo &get_type(const string_t &type_name) {
             if (types.count(type_name) || type_name.empty()) {
                 return type_info[type_name];
@@ -310,18 +317,20 @@ namespace alex {
 
     enum TokenType {
         Token_Null,
-        Token_String,
+        Token_String, ///< "string"|'string'
         Token_Identifier,
-        Token_Bar, ///< '|'
-        Token_Arrow, ///< '->'
-        Token_NoneAsso,
-        Token_LeftAsso,
-        Token_RightAsso,
-        Token_LeftBrace, ///< '{'
-        Token_RightBrace, ///< '}'
-        Token_LeftBraket, ///< '['
-        Token_RightBraket, ///< ']'
-        Token_Comma, ///< ','
+        Token_Bar, ///< `|`
+        Token_Arrow, ///< `->`
+        Token_MergeCreate, ///< %merge-create
+        Token_MergeInsert, ///< %merge-insert
+        Token_NoneAsso, ///< %none
+        Token_LeftAsso, ///< %left
+        Token_RightAsso, ///< %right
+        Token_LeftBrace, ///< `{`
+        Token_RightBrace, ///< `}`
+        Token_LeftBraket, ///< `[`
+        Token_RightBraket, ///< `]`
+        Token_Comma, ///< `,`
         Token_Colon,
         Token_Number,
         Token_Desc,
@@ -351,6 +360,8 @@ namespace alex {
             lexer.add_pattern("%left", Token_LeftAsso);
             lexer.add_pattern("%right", Token_RightAsso);
             lexer.add_pattern("%start", Token_Start);
+            lexer.add_pattern("%merge-create", Token_MergeCreate);
+            lexer.add_pattern("%merge-insert", Token_MergeInsert);
             lexer.add_pattern("%whitespace", Token_WhiteSpace);
             lexer.add_pattern("\\{", Token_LeftBrace);
             lexer.add_pattern("\\}", Token_RightBrace);
@@ -394,13 +405,13 @@ namespace alex {
             return false;
         }
         void expect(const char *str) {
-            std::cout << "Unexpected Token '" << str
-                      << "' line:" << lexer.line() + 1
+            std::cout << "Expect " << str
+                      << " line:" << lexer.line() + 1
                       << " column:" << lexer.column() + 1 << std::endl;
             std::cout << ">>> " << lexer.lexeme() << std::endl;
             std::cout << "    " << "^^^" << std::endl;
         }
-        void report(const char *str) {
+        void report(const std::string &str) {
             std::cout << "Warnning: " << str << std::endl;
         }
 
@@ -432,22 +443,24 @@ namespace alex {
         }
 
         void parse_rules() {
+            lexer.advance();
             while (parse_expression()) {}
         }
 
         bool parse_expression() {
-            lexer.advance();
             switch (lexer.symbol()) {
                 default:
-                    expect("identifier, associativity or start");
+                    expect("production, associativity, %start, %merge, %whitespace");
                     return false;
                 case Token_Null: return false;
-                case Token_Semicolon: return true;
+                case Token_Semicolon:
+                    lexer.advance();
+                    return true;
                 case Token_Type:
                 case Token_Identifier: {
                     std::string nonterminal_type;
                     if (lexer.symbol() == Token_Type) {
-                        nonterminal_type = lexer.lexeme();
+                        nonterminal_type = lexer.lexeme().substr(1);
                         lexer.advance();
                     }
                     active = get_nonterminal(lexer.lexeme());
@@ -460,8 +473,9 @@ namespace alex {
                         expect("->");
                         return false;
                     }
-                    active->push_production(new Production(active));
-                    while (parse_production());
+                    if (!parse_production()) {
+                        //return false;
+                    }
                     break;
                 }
                 case Token_NoneAsso:
@@ -475,26 +489,30 @@ namespace alex {
                     if (lexer.symbol() == Token_RightAsso)
                         asso = AssoRight;
                     lexer.advance();
-                    do {
-                        Symbol *symbol = parse_symbol();
-                        if (!symbol) {
-                            break;
-                        }
+                    while (auto *symbol = parse_symbol()) {
                         symbol->associativity = asso;
-                        // aloocate operator precedence
                         symbol->precedence = ++precedence;
-                    } while (true);
+                    }
                     break;
                 }
+                case Token_MergeCreate:
+                    lexer.advance();
+                    if (grammar.merge_create) {
+                        report("Merge create actions has already been defined");
+                    }
+                    grammar.merge_create = parse_action();
+                    break;
+                case Token_MergeInsert:
+                    lexer.advance();
+                    if (grammar.merge_insert) {
+                        report("Merge insert actions has already been defined");
+                    }
+                    grammar.merge_insert = parse_action();
+                    break;
                 case Token_Start:
                     lexer.advance();
-                    do {
-                        Symbol *symbol = parse_symbol();
-                        if (!symbol) {
-                            break;
-                        }
+                    while (auto *symbol = parse_symbol())
                         grammar.start->push_start(symbol);
-                    } while (true);
                     break;
                 case Token_WhiteSpace: {
                     lexer.advance();
@@ -516,59 +534,57 @@ namespace alex {
 
         bool parse_production() {
             do {
+                auto *production = new Production(active);
+                active->push_production(production);
+                assert(production);
+
+                while (auto *symbol = parse_symbol())
+                    production->push_symbol(symbol);
+
                 switch (lexer.symbol()) {
-                    case Token_Bar: // Or
-                        active->push_production(new Production(active));
-                        lexer.advance();
-                        return true;
+                    default:
+                        expect("symbol, type, `{`, `[`, `|` or `;`");
+                        return false;
+                    case Token_Bar:
+                        break;
                     case Token_LeftBrace:
                     case Token_LeftBraket:
                     case Token_Desc:
                     case Token_Type:
-                        active->productions.back()->action = parse_action();
-                        continue;
-                    case Token_Semicolon:
-                        return false;
-                    default:
+                        production->action = parse_action();
                         break;
+                    case Token_Semicolon:
+                        return true;
                 }
-
-                if (Symbol *symbol = parse_symbol()) {
-                    active->push_symbol(symbol);
-                } else {
-                    expect("regex or identifier");
-                    return false;
-                }
-
-            } while (true);
+            } while (match(Token_Bar));
         }
 
         Action *parse_action() {
             Action *action = new Action();
             grammar.actions.emplace_back(action);
-            action->type = active->type;
+            //action->type = active->type;
             parser_object(action);
             return action;
         }
 
         int parser_object(Action *action) {
-            /**
-             * $2{value:10}
+            /** Opcode generation example:
+             * eg. $2{value:10}
              * push_value $2
              * push_int 10
              * pop_set value
              *
-             * $2{value:#2}
+             * eg. $2{value:#2}
              * push_value $2
              * push_value $2
              * pop_insert_obj value
              *
-             * $2{value:$2}
+             * eg. $2{value:$2}
              * push_value $2
              * push_value $2
              * pop_set value
              *
-             * @Value {value:66, obj: @Test {name: @1}}
+             * eg. @Value {value:66, obj: @Test {name: @1}}
              * create_obj @Value
              * push_int 66
              * pop_set value
@@ -577,12 +593,12 @@ namespace alex {
              * pop_set name
              * pop_set obj
              *
-             * @Value $2{value: 20}
+             * eg. @Value $2{value: 20}
              * push_value $2
              * push_int 20
              * pop_set value
              *
-             * {value: [1, 2, 3]}
+             * eg. {value: [1, 2, 3]}
              * create_obj
              * create_arr
              * push_int 1
@@ -893,8 +909,17 @@ namespace alex {
         void generate_transition(GrammarState *state) {
             state->visited = true;
             for (auto &symbol : grammar.symbols) {
-                auto *goto_state = get_goto_state(state->items, symbol.get());
-                if (goto_state) {
+                // advance symbol
+                if (auto *goto_state = get_goto_state(state->items, symbol.get())) {
+                    auto find = state->transitions.find(GrammarTransition(nullptr, symbol.get()));
+                    if (find != state->transitions.end()) {
+                        // FIXME: May be this redundant?
+                        // merge the transition that go to the same state
+                        if (find->state == goto_state) {
+                            continue;
+                        }
+                    }
+                    // add new transition
                     auto iter = state->transitions.insert(GrammarTransition(goto_state, symbol.get()));
                     if (symbol.get() == grammar.error) {
                         state->error = &(*iter);
@@ -906,27 +931,29 @@ namespace alex {
             for (auto &item : state->items) {
                 if (item.dot_reduce()) {
                     auto *rightmost = item.production->rightmost_teminal();
-                    for (auto &symbol : item.lookahead_symbols) {
-                        auto iter = state->transitions.find(GrammarTransition(nullptr, symbol));
+                    for (auto &lookahead : item.lookahead_symbols) {
+                        auto iter = state->transitions.find(GrammarTransition(nullptr, lookahead));
                         if (iter == state->transitions.end()) {
+                            // reduce if there is no transition on lookahead
                             state->transitions.insert(GrammarTransition(
                                     nullptr,
-                                    symbol,
+                                    lookahead,
                                     TransitionReduce,
                                     item.production->lhs,
                                     item.production->action,
                                     item.production->symbols.size(),
                                     item.production->lhs->precedence));
                         } else if (rightmost && rightmost->precedence > 0) {
-                            if ((rightmost->precedence < symbol->precedence ||
-                                 (rightmost->precedence == symbol->precedence &&
+                            // handle operator precedence
+                            if ((rightmost->precedence < lookahead->precedence ||
+                                 (rightmost->precedence == lookahead->precedence &&
                                   rightmost->associativity == AssoRight))) {
                                 // Shift
                                 iter->type = TransitionShift;
                             }
 
-                            if (((rightmost->precedence > symbol->precedence) ||
-                                 rightmost->precedence == symbol->precedence &&
+                            if (((rightmost->precedence > lookahead->precedence) ||
+                                 rightmost->precedence == lookahead->precedence &&
                                  rightmost->associativity == AssoLeft)) {
                                 // Reduce
                                 iter->type = TransitionReduce;
@@ -935,22 +962,33 @@ namespace alex {
                                 iter->reduce_length = item.production->symbols.size();
                             }
                         } else {
-                            state->conflict = iter->type == TransitionShift ? ConflictShiftReduce : ConflictReduceReduce;
+                            // This transition is already shift or reduce, so there is a conflict
+                            state->conflict = (iter->type == TransitionShift ? ConflictShiftReduce
+                                                                             : ConflictReduceReduce);
+                            // There is no shift on lookahead, so we need to reduce it
                             state->transitions.insert(GrammarTransition(
                                     nullptr,
-                                    symbol,
+                                    lookahead,
                                     TransitionReduce,
                                     item.production->lhs,
                                     item.production->action,
                                     item.production->symbols.size(),
                                     item.production->lhs->precedence));
+
+                            // report the conflict
+                            if (state->conflict == ConflictShiftReduce) {
+                                shift_reduce_conflict(state, iter->symbol, item.production);
+                            } else {
+                                reduce_reduce_conflict(state, iter->symbol);
+                            }
+
                         }
                     }
                 }
             }
         }
         void reduce_reduce_conflict(GrammarState *state, Symbol *symbol) {
-            std::cout << "Reduce Reduce Conflict lookahead " << symbol->to_str() << std::endl;
+            std::cout << "Warning: Reduce Reduce Conflict when lookahead " << symbol->to_str() << std::endl;
             for (auto &conf : state->items) {
                 if (conf.dot_reduce() && conf.is_lookahead(symbol)) {
                     std::cout << "Reduce " << conf.production->to_str() << std::endl;
@@ -959,13 +997,18 @@ namespace alex {
             std::cout << std::endl;
         }
         void shift_reduce_conflict(GrammarState *state, Symbol *symbol, Production *production) {
-            std::cout << "Shift Reduce Conflict lookahead " << symbol->to_str() << std::endl;
+            std::cout << "Warning: Shift Reduce Conflict when lookahead " << symbol->to_str() << std::endl;
             for (auto &conf : state->items) {
                 if (conf.dot_symbol() == symbol) {
                     std::cout << "Shift " << conf.production->to_str(conf.position) << std::endl;
                 }
             }
-            std::cout << "Reduce " << production->to_str() << std::endl;
+            for (auto &item: state->items) {
+                if (item.dot_reduce() && item.is_lookahead(symbol)) {
+                    std::cout << "Reduce " << item.production->to_str(item.position) << std::endl;
+                }
+            }
+            //std::cout << "Reduce " << production->to_str() << std::endl; // 输出发生冲突的产生式
             for (auto &conf : state->items) {
                 std::cout << "  | " << conf.production->to_str(conf.position) << std::endl;
             }
