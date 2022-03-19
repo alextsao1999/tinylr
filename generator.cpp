@@ -288,7 +288,7 @@ public:
 
         os << "#define LR_ASSERT(x) assert(x)\n"
               "#define LR_UNREACHED() assert(!\"unreached here\")\n"
-              "#define LR_TYPESPEC(TYPE) TYPE\n\n";
+              "#define LR_TYPESPEC(TYPE) virtual TYPE\n\n";
 
         os << "#define CONFLICT_NONE 0\n"
               "#define CONFLICT_SHIFT_REDUCE 1\n"
@@ -538,9 +538,10 @@ public:
 
                 for (auto &[field, index]: type.fields) {
                     auto output = field;
-                    output[0] = std::toupper(output[0]);
-                    output = "get" + output;
-
+                    if (output.substr(0, 2) != "is") {
+                        output[0] = std::toupper(output[0]);
+                        output = "get" + output;
+                    }
                     auto field_type = type.fields_type[field];
                     if (field_type.empty()) { // non type
                         os << "    " << "value_t &";
@@ -551,7 +552,7 @@ public:
                         os << output << "() { return value_[\"" << field << "\"].get_ref<" << field_type << ">(); }\n";
                     } else { // get
                         os << "    " << field_type << " ";
-                        os << output << "() { return value_[\"" << field << "\"].get<" << field_type << ">(); }\n";
+                        os << output << "() { return value_[\"" << field << "\"]; }\n";
                     }
                 }
                 os << "};\n";
@@ -1010,7 +1011,7 @@ public:
         }
         if (node.trans->reduce_length) {
             // merge the locations
-            loc = std::accumulate(node.paths.begin(), node.paths.end(), Location(), [](Location &loc, NodePtr &node) {
+            loc = std::accumulate(node.paths.begin(), node.paths.end(), Location(), [](Location loc, NodePtr &node) {
                 return loc.merge(node->location);
             });
             if (position && value.is_object()) {

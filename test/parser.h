@@ -13,7 +13,7 @@
 
 #define LR_ASSERT(x) assert(x)
 #define LR_UNREACHED() assert(!"unreached here")
-#define LR_TYPESPEC(TYPE) TYPE
+#define LR_TYPESPEC(TYPE) virtual TYPE
 
 #define CONFLICT_NONE 0
 #define CONFLICT_SHIFT_REDUCE 1
@@ -232,7 +232,7 @@ enum {
     TYPE_LONGLITERAL = 38,
     TYPE_MERGE = 1,
     TYPE_NEWEXPR = 29,
-    TYPE_PARAM = 10,
+    TYPE_PARAMDEF = 10,
     TYPE_PROGRAM = 2,
     TYPE_READPROPERTYDECLARE = 7,
     TYPE_RETURNSTMT = 13,
@@ -267,7 +267,7 @@ class AccessExpr : public JsonASTBase {
 public:
     AccessExpr(value_t &value) : JsonASTBase(value) { LR_ASSERT(value["id"] == TYPE_ACCESSEXPR); }
     value_t &getField() { return value_["field"]; }
-    bool getIsLeft() { return value_["isLeft"].get<bool>(); }
+    bool isLeft() { return value_["isLeft"]; }
     value_t &getLhs() { return value_["lhs"]; }
 };
 class ArrowExpr : public JsonASTBase {
@@ -343,7 +343,7 @@ class DotExpr : public JsonASTBase {
 public:
     DotExpr(value_t &value) : JsonASTBase(value) { LR_ASSERT(value["id"] == TYPE_DOTEXPR); }
     value_t &getField() { return value_["field"]; }
-    bool getIsLeft() { return value_["isLeft"].get<bool>(); }
+    bool isLeft() { return value_["isLeft"]; }
     value_t &getLhs() { return value_["lhs"]; }
 };
 class Error : public JsonASTBase {
@@ -366,11 +366,11 @@ class FunctionDeclare : public JsonASTBase {
 public:
     FunctionDeclare(value_t &value) : JsonASTBase(value) { LR_ASSERT(value["id"] == TYPE_FUNCTIONDECLARE); }
     value_t &getBlock() { return value_["block"]; }
-    bool getInline() { return value_["inline"].get<bool>(); }
+    bool getInline() { return value_["inline"]; }
     value_t &getName() { return value_["name"]; }
     value_t &getParams() { return value_["params"]; }
-    bool getPublic() { return value_["public"].get<bool>(); }
-    bool getStatic() { return value_["static"].get<bool>(); }
+    bool getPublic() { return value_["public"]; }
+    bool getStatic() { return value_["static"]; }
     value_t &getType() { return value_["type"]; }
 };
 class HexLiteral : public JsonASTBase {
@@ -415,7 +415,6 @@ public:
 class Merge : public JsonASTBase {
 public:
     Merge(value_t &value) : JsonASTBase(value) { LR_ASSERT(value["id"] == TYPE_MERGE); }
-    value_t &getSym() { return value_["sym"]; }
     value_t &getValue() { return value_["value"]; }
 };
 class NewExpr : public JsonASTBase {
@@ -424,9 +423,9 @@ public:
     value_t &getArgs() { return value_["args"]; }
     value_t &getType() { return value_["type"]; }
 };
-class Param : public JsonASTBase {
+class ParamDef : public JsonASTBase {
 public:
-    Param(value_t &value) : JsonASTBase(value) { LR_ASSERT(value["id"] == TYPE_PARAM); }
+    ParamDef(value_t &value) : JsonASTBase(value) { LR_ASSERT(value["id"] == TYPE_PARAMDEF); }
     value_t &getName() { return value_["name"]; }
     value_t &getType() { return value_["type"]; }
 };
@@ -440,7 +439,7 @@ public:
     ReadPropertyDeclare(value_t &value) : JsonASTBase(value) { LR_ASSERT(value["id"] == TYPE_READPROPERTYDECLARE); }
     value_t &getBlock() { return value_["block"]; }
     value_t &getName() { return value_["name"]; }
-    bool getPublic() { return value_["public"].get<bool>(); }
+    bool getPublic() { return value_["public"]; }
     value_t &getType() { return value_["type"]; }
 };
 class ReturnStmt : public JsonASTBase {
@@ -489,14 +488,14 @@ public:
     VariableDeclare(value_t &value) : JsonASTBase(value) { LR_ASSERT(value["id"] == TYPE_VARIABLEDECLARE); }
     value_t &getInit() { return value_["init"]; }
     value_t &getName() { return value_["name"]; }
-    bool getPublic() { return value_["public"].get<bool>(); }
-    bool getStatic() { return value_["static"].get<bool>(); }
+    bool getPublic() { return value_["public"]; }
+    bool getStatic() { return value_["static"]; }
     value_t &getType() { return value_["type"]; }
 };
 class VariableExpr : public JsonASTBase {
 public:
     VariableExpr(value_t &value) : JsonASTBase(value) { LR_ASSERT(value["id"] == TYPE_VARIABLEEXPR); }
-    bool getIsLeft() { return value_["isLeft"].get<bool>(); }
+    bool isLeft() { return value_["isLeft"]; }
     value_t &getName() { return value_["name"]; }
 };
 class WhileStmt : public JsonASTBase {
@@ -511,7 +510,7 @@ public:
     value_t &getBlock() { return value_["block"]; }
     value_t &getName() { return value_["name"]; }
     value_t &getParams() { return value_["params"]; }
-    bool getPublic() { return value_["public"].get<bool>(); }
+    bool getPublic() { return value_["public"]; }
     value_t &getType() { return value_["type"]; }
 };
 template<typename SubTy, typename RetTy = void>
@@ -581,8 +580,8 @@ struct Visitor {
                 return static_cast<SubTy *>(this)->visitMerge(value);
             case TYPE_NEWEXPR:
                 return static_cast<SubTy *>(this)->visitNewExpr(value);
-            case TYPE_PARAM:
-                return static_cast<SubTy *>(this)->visitParam(value);
+            case TYPE_PARAMDEF:
+                return static_cast<SubTy *>(this)->visitParamDef(value);
             case TYPE_PROGRAM:
                 return static_cast<SubTy *>(this)->visitProgram(value);
             case TYPE_READPROPERTYDECLARE:
@@ -694,7 +693,7 @@ struct Visitor {
     LR_TYPESPEC(RetTy) visitNewExpr(NewExpr value) {
         return RetTy();
     }
-    LR_TYPESPEC(RetTy) visitParam(Param value) {
+    LR_TYPESPEC(RetTy) visitParamDef(ParamDef value) {
         return RetTy();
     }
     LR_TYPESPEC(RetTy) visitProgram(Program value) {

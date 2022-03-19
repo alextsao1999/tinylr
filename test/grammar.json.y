@@ -7,7 +7,7 @@
 %whitespace "[ \n\r]+";
 %start programs;
 
-%merge-create @Merge {value: [$1, $2], syms: @1};
+%merge-create @Merge {value: [$1, $2]};
 %merge-insert @Merge $1{value: #2};
 
 programs -> programs program @Program $1{value:#2}
@@ -73,7 +73,7 @@ params -> params ',' param $1[$3]
         |
         ;
 
-param -> type identifier @Param{type:$1 , name:$2};
+param -> type identifier @ParamDef{type:$1 , name:$2};
 
 block  -> '{' stmts '}' $2
         | '{' '}'

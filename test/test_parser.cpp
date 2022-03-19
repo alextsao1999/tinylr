@@ -27,15 +27,15 @@ struct MyVisitor : public Visitor<MyVisitor> {
         visit(value.getBlock());
     }
 
-    void visitParam(Param value) {
-        Visitor::visitParam(value);
+    void visitParam(ParamDef value) {
+        Visitor::visitParamDef(value);
     }
 
 };
 
 int main() {
-    const char *string = "int main() {"
-                         " a < b > c;"
+    const char *string = "int aaa() {"
+                         "  int value = 10;"
                          "}";
 
     GLRParser<> parser(false);
