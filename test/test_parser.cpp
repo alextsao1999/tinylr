@@ -34,11 +34,12 @@ struct MyVisitor : public Visitor<MyVisitor> {
 };
 
 int main() {
-    const char *string = "int aaa() {"
+    const char *string = "import a.2.c;"
+                         "int aaa() {"
                          "  int value = 10;"
                          "}";
 
-    GLRParser<> parser(false);
+    GLRParser<> parser(true);
     parser.reset(string, string + strlen(string));
     parser.parse();
     assert(parser.accept());

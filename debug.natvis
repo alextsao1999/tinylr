@@ -51,6 +51,24 @@
             </ArrayItems>
         </Expand>
     </Type>
+    <Type Name="LexerState">
+        <DisplayString Condition="symbol != 0">{{ Symbol = {ParserSymbols[symbol].text} }}</DisplayString>
+        <DisplayString Condition="symbol == 0">{{ Null }}</DisplayString>
+        <Expand>
+            <ArrayItems>
+                <Size>transition_count</Size>
+                <ValuePointer>transitions</ValuePointer>
+            </ArrayItems>
+        </Expand>
+    </Type>
+    <Type Name="LexerTransition">
+<!--        <DisplayString>{{ Begin={(char)begin} }}</DisplayString>-->
+        <Expand>
+            <Item Name="[Begin]">(char) begin</Item>
+            <Item Name="[End]">(char) end</Item>
+            <Item Name="[State]">state</Item>
+        </Expand>
+    </Type>
     <Type Name="std::shared_ptr&lt;*&gt;">
         <DisplayString Condition="_Ptr == 0">empty</DisplayString>
         <DisplayString Condition="_Ptr != 0">{*_Ptr}</DisplayString>
@@ -87,11 +105,21 @@
             <Item Name="[State]">state</Item>
         </Expand>
     </Type>
-    <Type Name="ReduceAction">
+    <Type Name="alex::RegexRange">
         <Expand>
-            <Item Name="[Opcode]">((ActionOpcode) opcode)</Item>
-            <Item Name="[Int]">index</Item>
-            <Item Name="[Str]">value</Item>
+            <Item Name="[begin]">((char) begin)</Item>
+            <Item Name="[end]">((char) (end - 1))</Item>
+            <Item Name="[firstpos]">firstpos</Item>
+            <Item Name="[lastpos]">lastpos</Item>
+            <Item Name="[followpos]">followpos</Item>
+        </Expand>
+    </Type>
+    <Type Name="alex::RegexGenerator&lt;*&gt;::Transition">
+<!--        <DisplayString>{{ [{char(begin)}({begin}), {char(end)}({begin})] }}</DisplayString>-->
+        <Expand>
+            <Item Name="[Begin]">((char) begin)</Item>
+            <Item Name="[End]">((char) (end - 1))</Item>
+            <Item Name="[State]">state</Item>
         </Expand>
     </Type>
     <Type Name="alex::RegexRange">
@@ -101,6 +129,13 @@
             <Item Name="[firstpos]">firstpos</Item>
             <Item Name="[lastpos]">lastpos</Item>
             <Item Name="[followpos]">followpos</Item>
+        </Expand>
+    </Type>
+    <Type Name="ReduceAction">
+        <Expand>
+            <Item Name="[Opcode]">((ActionOpcode) opcode)</Item>
+            <Item Name="[Int]">index</Item>
+            <Item Name="[Str]">value</Item>
         </Expand>
     </Type>
 

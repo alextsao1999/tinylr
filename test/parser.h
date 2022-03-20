@@ -469,7 +469,7 @@ public:
 class TypeCast : public JsonASTBase {
 public:
     TypeCast(value_t &value) : JsonASTBase(value) { LR_ASSERT(value["id"] == TYPE_TYPECAST); }
-    value_t &getCast_to() { return value_["cast_to"]; }
+    value_t &getCastTo() { return value_["castTo"]; }
     value_t &getValue() { return value_["value"]; }
 };
 class TypeSpecifier : public JsonASTBase {
@@ -1107,7 +1107,7 @@ public:
                 }
             }
             if (state->error && shift_count == 0 || node->error) {
-                do_error(node);
+                do_error(node, state->error);
             }
         }
         if (shift_list.size() == 0) {
@@ -1147,7 +1147,7 @@ public:
         }
         if (node.trans->reduce_length) {
             // merge the locations
-            loc = std::accumulate(node.paths.begin(), node.paths.end(), Location(), [](Location &loc, NodePtr &node) {
+            loc = std::accumulate(node.paths.begin(), node.paths.end(), Location(), [](Location loc, NodePtr &node) {
                 return loc.merge(node->location);
             });
             if (position && value.is_object()) {
@@ -1247,23 +1247,24 @@ public:
         }
         node->merge++;
     }
-    void do_error(NodePtr node) {
+    void do_error(NodePtr node, ParserTransition *trans) {
         // shift error
         if (!node->error) {
             // there is error state, goto error state
-            node = Node::Create(node->state->error->state, node);
-            node->symbol = node->state->error->symbol;
+            node = Node::Create(trans->state, node);
+            node->symbol = trans->symbol;
             node->value = value_t::array();
             node->lexeme = ParserSymbols[node->symbol].text;
-            node->location = lexer_.location();
             node->error = true;
             node->depth = node->depth + 1;
         }
-        node->value.push_back({{"lexeme",      lexer_.lexeme()},
-                               {"lineStart",   lexer_.line_start()},
+        node->location = node->location.merge(lexer_.location());
+        node->value.push_back({{"lexeme", lexer_.lexeme()},
+                               {"symbol", lexer_.symbol()},
+                               {"lineStart", lexer_.line_start()},
                                {"columnStart", lexer_.column_start()},
-                               {"lineEnd",     lexer_.line_end()},
-                               {"columnEnd",   lexer_.column_end()}});
+                               {"lineEnd", lexer_.line_end()},
+                               {"columnEnd", lexer_.column_end()}});
         shift_list.push_back(node);
     }
 

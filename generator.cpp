@@ -220,19 +220,24 @@ std::string parser_emit_parser_states(LALRGenerator &generator) {
 
 class Generator {
 public:
-    Generator(Options &opts) : options(opts) {
-        LALRGrammarParser<StreamIter> lalr(grammar);
+    Generator(Options &opts) : options(opts) {}
+    ~Generator() {}
 
+    void parse_from_options() {
         // parse the input file
-        std::fstream input(opts.input, std::ios::in);
-        lalr.parse(input);
-        input.close();
-
+        std::fstream input(options.input, std::ios::in);
+        parse_from_istream(input);
+    }
+    void parse_from_istream(std::istream &is) {
+        // clear grammar data
+        grammar.clear();
+        LALRGrammarParser<StreamIter> lalr(grammar);
+        // parse the input
+        lalr.parse(is);
         // new generator
         generator = std::make_unique<LALRGenerator>(grammar);
         generator->generate();
     }
-    ~Generator() {}
 
     /// generate all files
     void generate() {
@@ -240,11 +245,7 @@ public:
 
         // generate parser.cpp
         fs.open(options.output, std::ios::trunc | std::ios::out);
-        fs << "//\n"
-           << "// Created by Alex's tiny lr.\n"
-           << "//\n"
-           << "#include \"" << drop_file_ext(get_file_name(options.output)) << ".h" << "\"\n";
-        generate_state_machine(fs);
+        generate_cpp_to_stream(fs);
         fs.close();
 
         // generate parser.h
@@ -259,10 +260,18 @@ public:
             generate_ast_header(fs);
             fs.close();
         }
-
     }
 
-    /// generate lexer states and parser states(parser.cpp)
+    /// generate(parser.cpp) to stream
+    void generate_cpp_to_stream(std::ostream &os) {
+        os << "//\n"
+           << "// Created by Alex's tiny lr.\n"
+           << "//\n"
+           << "#include \"" << drop_file_ext(get_file_name(options.output)) << ".h" << "\"\n";
+
+        generate_state_machine(os);
+    }
+    /// generate lexer states and parser states
     void generate_state_machine(std::ostream &os) {
         os << parser_emit_symbols(*generator)
            << parser_emit_lexer_states(*generator)
@@ -971,7 +980,7 @@ public:
                 }
             }
             if (state->error && shift_count == 0 || node->error) {
-                do_error(node);
+                do_error(node, state->error);
             }
         }
         if (shift_list.size() == 0) {
@@ -1111,23 +1120,24 @@ public:
         }
         node->merge++;
     }
-    void do_error(NodePtr node) {
+    void do_error(NodePtr node, ParserTransition *trans) {
         // shift error
         if (!node->error) {
             // there is error state, goto error state
-            node = Node::Create(node->state->error->state, node);
-            node->symbol = node->state->error->symbol;
+            node = Node::Create(trans->state, node);
+            node->symbol = trans->symbol;
             node->value = value_t::array();
             node->lexeme = ParserSymbols[node->symbol].text;
-            node->location = lexer_.location();
             node->error = true;
             node->depth = node->depth + 1;
         }
-        node->value.push_back({{"lexeme",      lexer_.lexeme()},
-                               {"lineStart",   lexer_.line_start()},
+        node->location = node->location.merge(lexer_.location());
+        node->value.push_back({{"lexeme", lexer_.lexeme()},
+                               {"symbol", lexer_.symbol()},
+                               {"lineStart", lexer_.line_start()},
                                {"columnStart", lexer_.column_start()},
-                               {"lineEnd",     lexer_.line_end()},
-                               {"columnEnd",   lexer_.column_end()}});
+                               {"lineEnd", lexer_.line_end()},
+                               {"columnEnd", lexer_.column_end()}});
         shift_list.push_back(node);
     }
 
@@ -1739,10 +1749,11 @@ private:
 int main(int argc, char **argv) {
     Options opts;
     opts.input = "../test/grammar.json.y";
-    opts.output = "../test/parser.cpp";
+    opts.output = "./parser.cpp";
     opts.ast_header = "../test/ast.h";
     opts.prefix = "TYPE_";
     opts.type = TypeJson;
+    bool parse_from_stdin = false;
     for (int index = 1; index < argc; index++) {
         if (strcmp(argv[index], "-o") == 0 || strcmp(argv[index], "--output") == 0) {
             opts.output = argv[index + 1];
@@ -1753,19 +1764,32 @@ int main(int argc, char **argv) {
                       << "  -o, --output <file>\n"
                       << "  -h, --help\n"
                       << "  -a, --ast\n"
-                      << "  -p, --prefix <prefix>\n";
+                      << "  -p, --prefix <prefix>\n"
+                      << "  -i, --stdin\n"
+                      ;
             return 0;
         } else if (strcmp(argv[index], "-p") == 0 || strcmp(argv[index], "--prefix") == 0) {
             opts.prefix = argv[index + 1];
             index += 2;
         } else if (strcmp(argv[index], "-a") == 0 || strcmp(argv[index], "--ast") == 0) {
-            opts.type = TypeAst;
+            //opts.type = TypeAst;
+            // TODO: fix this
+            index += 1;
+        } else if (strcmp(argv[index], "-i") == 0 || strcmp(argv[index], "--stdin") == 0) {
+            parse_from_stdin = true;
             index += 1;
         } else {
             opts.input = argv[index];
         }
     }
     Generator generator(opts);
+    if (parse_from_stdin) {
+        generator.parse_from_istream(std::cin);
+    } else {
+        generator.parse_from_options();
+    }
     generator.generate();
+    std::cout << "Done.\n"
+                 "Output: " << opts.output << "\n";
     return 0;
 }

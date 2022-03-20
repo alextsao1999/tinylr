@@ -146,7 +146,7 @@ expr -> expr '<' expr @BinaryExpr{left:$1, @string_t& op:@2, right:$3}
       | expr '?' expr ':' expr @TernaryExpr{condition:$1, left:$3, right:$5}
       | lvalue '=' expr @AssignExpr{left: $1{isLeft: true}, right:$3}
       | '(' params ')' '->' block @ArrowExpr{params:$2, block:$5}
-      | '(' type ')' expr @TypeCast{cast_to:$2, value:$4}
+      | '(' type ')' expr @TypeCast{castTo:$2, value:$4}
       | '(' expr ')' $2
       | primary $1
       ;
@@ -169,7 +169,7 @@ args   -> args ',' expr $1[$3]
 
 literal -> "\".*\"" @StringLiteral{@string_t& string: @1}
          | "[0-9]+" @IntegerLiteral{@string_t& string: @1}
-         | "[0-9]+\.[0-9]*f?" @FloatLiteral{@string_t& string: @1}
+         | "[0-9]+(\.[0-9]+)?f" @FloatLiteral{@string_t& string: @1}
          | "[0-9]+u" @UnsignedLiteral{@string_t& string: @1}
          | "[0-9]+L" @LongLiteral{@string_t& string: @1}
          | "0x[0-9A-F]+" @HexLiteral{@string_t& string: @1}

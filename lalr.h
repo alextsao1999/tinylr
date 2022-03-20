@@ -313,6 +313,19 @@ namespace alex {
             type.index = types.size();
             return type;
         }
+
+        void clear() {
+            symbols.clear();
+            actions.clear();
+            type_info.clear();
+            types.clear();
+            start = nullptr;
+            end = nullptr;
+            error = nullptr;
+            whitespace = nullptr;
+            merge_create = nullptr;
+            merge_insert = nullptr;
+        }
     };
 
     enum TokenType {
