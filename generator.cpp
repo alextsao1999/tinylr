@@ -293,7 +293,8 @@ public:
               "#include <map>\n"
               "#include <queue>\n"
               "#include <cassert>\n"
-              "#include <functional>\n\n";
+              "#include <functional>\n"
+              "#include <algorithm>\n\n";
 
         os << "#define LR_ASSERT(x) assert(x)\n"
               "#define LR_UNREACHED() assert(!\"unreached here\")\n"
@@ -339,6 +340,17 @@ struct LexerState {
     int symbol;
     inline LexerTransition *begin() { return transitions; }
     inline LexerTransition *end() { return transitions + transition_count; }
+    inline LexerTransition *find(int chr) {
+        LexerTransition trans{0, chr};
+        if (auto *iter = std::upper_bound(begin(), end(), trans, [](const LexerTransition &LHS, const LexerTransition &RHS) {
+            return LHS.end < RHS.end;
+        })) {
+            if (iter && iter->begin <= chr && chr < iter->end) {
+                return iter;
+            }
+        }
+        return nullptr;
+    }
 };
 
 struct ReduceAction {
@@ -368,6 +380,12 @@ struct ParserState {
     ParserTransition *error;
     inline ParserTransition *begin() { return transitions; }
     inline ParserTransition *end() { return transitions + transition_count; }
+    inline ParserTransition *find(int symbol) {
+        ParserTransition trans{0, symbol};
+        return std::lower_bound(begin(), end(), trans, [](const ParserTransition &LHS, const ParserTransition &RHS) {
+            return LHS.symbol < RHS.symbol;
+        });
+    }
 };
 
 extern int LexerWhitespaceSymbol;
@@ -418,14 +436,6 @@ private:
     int token_symbol = 0;
     string_t lexeme_;
 private:
-    inline LexerTransition *find_trans(LexerState *state, char_t chr) {
-        for (auto &trans : *state) {
-            if (trans.begin <= chr && chr < trans.end) {
-                return &trans;
-            }
-        }
-        return nullptr;
-    }
     auto advance_symbol() {
         LexerState *state = lexer_state;
         lexeme_.clear();
@@ -433,8 +443,7 @@ private:
             if (current == end) {
                 return state->symbol;
             }
-            auto *trans = find_trans(state, *current);
-            if (trans) {
+            if (auto *trans = state->find(*current)) {
                 lexeme_ += *current;
                 state = trans->state;
                 ++position_;
@@ -953,30 +962,22 @@ public:
         return std::get<1>(*frontier.begin())->value;
     }
 
-    void reduce() {
-        for (auto &[state, node] : frontier) {
-            do_reduce(node);
-        }
-        while (!reduce_list.empty()) {
-            ReduceNode node = std::move(reduce_list.top());
-            reduce_list.pop();
-            do_goto(node);
-        }
-    }
     void shift() {
         shift_list.clear();
         for (auto &[state, node] : frontier) {
             int shift_count = 0;
-            for (auto &trans : *state) {
-                if (trans.type == TRANSITION_SHIFT && trans.symbol == lexer_.symbol()) {
-                    NodePtr shift_node = Node::Create(trans.state, node);
+            for (auto *trans = state->find(lexer_.symbol()); trans < state->end(); trans++) {
+                if (trans->symbol != lexer_.symbol()) {
+                    break;
+                }
+                if (trans->type == TRANSITION_SHIFT) {
+                    NodePtr shift_node = Node::Create(trans->state, node);
                     shift_node->symbol = lexer_.symbol();
                     shift_node->lexeme = lexer_.lexeme();
                     shift_node->location = lexer_.location();
                     shift_node->depth = node->depth + 1;
                     shift_list.push_back(shift_node);
                     shift_count++;
-                    break;
                 }
             }
             if (state->error && shift_count == 0 || node->error) {
@@ -998,6 +999,16 @@ public:
             }
         }
         lexer_.advance();
+    }
+    void reduce() {
+        for (auto &[state, node] : frontier) {
+            do_reduce(node);
+        }
+        while (!reduce_list.empty()) {
+            ReduceNode node = std::move(reduce_list.top());
+            reduce_list.pop();
+            do_goto(node);
+        }
     }
 
     void do_goto(ReduceNode &node) {
@@ -1037,29 +1048,36 @@ public:
             accepted = true;
             return;
         }
-        for (auto &Goto: *(node.prev->state)) {
-            if (Goto.type == TRANSITION_SHIFT && Goto.symbol == node.trans->reduce_symbol) {
-                if (frontier.count(Goto.state)) {
-                    do_merge(frontier[Goto.state], value);
-                    frontier[Goto.state]->add_prev(node.prev);
-                    frontier[Goto.state]->depth = 0;
+
+        for (auto *trans = node.prev->state->find(node.trans->reduce_symbol); trans < node.prev->state->end(); trans++) {
+            if (trans->symbol != node.trans->reduce_symbol) {
+                break;
+            }
+            if (trans->type == TRANSITION_SHIFT) {
+                if (frontier.count(trans->state)) {
+                    do_merge(frontier[trans->state], value);
+                    frontier[trans->state]->add_prev(node.prev);
+                    frontier[trans->state]->depth = 0;
                 } else {
-                    auto goto_node = Node::Create(Goto.state, node.prev);
-                    goto_node->symbol = node.trans->reduce_symbol;
-                    goto_node->value = std::move(value);
-                    goto_node->lexeme = ParserSymbols[node.trans->reduce_symbol].text;
-                    goto_node->location = loc;
-                    goto_node->depth = node.prev->depth + 1;
-                    do_reduce(goto_node);
-                    frontier.insert(std::pair(goto_node->state, goto_node));
+                    NodePtr shift = Node::Create(trans->state, node.prev);
+                    shift->symbol = node.trans->reduce_symbol;
+                    shift->value = std::move(value);
+                    shift->lexeme = ParserSymbols[node.trans->reduce_symbol].text;
+                    shift->location = loc;
+                    shift->depth = node.prev->depth + 1;
+                    do_reduce(shift);
+                    frontier.insert({shift->state, shift});
                 }
             }
         }
     }
     void do_reduce(NodePtr &node) {
-        for (auto &trans : *(node->state)) {
-            if (trans.type == TRANSITION_REDUCE && trans.symbol == lexer_.symbol()) {
-                enumerate_path(node, &trans);
+        for (auto *trans = node->state->find(lexer_.symbol()); trans < node->state->end(); trans++) {
+            if (trans->symbol != lexer_.symbol()) {
+                break;
+            }
+            if (trans->type == TRANSITION_REDUCE) {
+                enumerate_path(node, trans);
             }
         }
     }
@@ -1080,6 +1098,9 @@ public:
         DFS(start, trans->reduce_length);
     }
     void do_merge(NodePtr node, value_t &value) {
+        if (node->value == value) {
+            return;
+        }
         struct Getter {
             NodePtr node;
             Node inner;
@@ -1749,7 +1770,7 @@ private:
 int main(int argc, char **argv) {
     Options opts;
     opts.input = "../test/grammar.json.y";
-    opts.output = "./parser.cpp";
+    opts.output = "../test/parser.cpp";
     opts.ast_header = "../test/ast.h";
     opts.prefix = "TYPE_";
     opts.type = TypeJson;

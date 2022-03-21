@@ -10,6 +10,7 @@
 #include <queue>
 #include <cassert>
 #include <functional>
+#include <algorithm>
 
 #define LR_ASSERT(x) assert(x)
 #define LR_UNREACHED() assert(!"unreached here")
@@ -52,6 +53,17 @@ struct LexerState {
     int symbol;
     inline LexerTransition *begin() { return transitions; }
     inline LexerTransition *end() { return transitions + transition_count; }
+    inline LexerTransition *find(int chr) {
+        LexerTransition trans{0, chr};
+        if (auto *iter = std::upper_bound(begin(), end(), trans, [](const LexerTransition &LHS, const LexerTransition &RHS) {
+            return LHS.end < RHS.end;
+        })) {
+            if (iter != end() && iter->begin <= chr && chr < iter->end) {
+                return iter;
+            }
+        }
+        return nullptr;
+    }
 };
 
 struct ReduceAction {
@@ -81,6 +93,12 @@ struct ParserState {
     ParserTransition *error;
     inline ParserTransition *begin() { return transitions; }
     inline ParserTransition *end() { return transitions + transition_count; }
+    inline ParserTransition *find(int symbol) {
+        ParserTransition trans{0, symbol};
+        return std::lower_bound(begin(), end(), trans, [](const ParserTransition &LHS, const ParserTransition &RHS) {
+            return LHS.symbol < RHS.symbol;
+        });
+    }
 };
 
 extern int LexerWhitespaceSymbol;
@@ -146,8 +164,7 @@ private:
             if (current == end) {
                 return state->symbol;
             }
-            auto *trans = find_trans(state, *current);
-            if (trans) {
+            if (auto *trans = state->find(*current)) {
                 lexeme_ += *current;
                 state = trans->state;
                 ++position_;
@@ -205,45 +222,47 @@ using value_t = nlohmann::json;
 
 enum {
     TYPE_NONE = 0,
-    TYPE_ACCESSEXPR = 32,
-    TYPE_ARROWEXPR = 27,
-    TYPE_ASSIGNEXPR = 26,
-    TYPE_BINLITERAL = 40,
-    TYPE_BINARYEXPR = 24,
+    TYPE_ACCESSEXPR = 34,
+    TYPE_ARROWEXPR = 29,
+    TYPE_ASSIGNEXPR = 28,
+    TYPE_BINLITERAL = 42,
+    TYPE_BINARYEXPR = 26,
     TYPE_BLOCKSTMT = 12,
     TYPE_BREAKSTMT = 15,
     TYPE_CASESTMT = 21,
     TYPE_CASTMETHODDECLARE = 6,
-    TYPE_CHARLITERAL = 41,
+    TYPE_CHARLITERAL = 43,
     TYPE_CLASSDECLARE = 5,
     TYPE_CONTINUESTMT = 14,
     TYPE_DOWHILESTMT = 19,
-    TYPE_DOTEXPR = 31,
+    TYPE_DOTEXPR = 33,
     TYPE_ERROR = 4,
     TYPE_EXPRSTMT = 11,
-    TYPE_FLOATLITERAL = 36,
+    TYPE_FLOATLITERAL = 38,
     TYPE_FUNCTIONDECLARE = 9,
-    TYPE_HEXLITERAL = 39,
+    TYPE_HEXLITERAL = 41,
     TYPE_IFELSESTMT = 17,
     TYPE_IFSTMT = 16,
     TYPE_IMPORT = 3,
-    TYPE_INTEGERLITERAL = 35,
-    TYPE_INVOKEEXPR = 33,
-    TYPE_LONGLITERAL = 38,
+    TYPE_INTEGERLITERAL = 37,
+    TYPE_INVOKEEXPR = 35,
+    TYPE_LONGLITERAL = 40,
     TYPE_MERGE = 1,
-    TYPE_NEWEXPR = 29,
+    TYPE_NEWEXPR = 31,
     TYPE_PARAMDEF = 10,
     TYPE_PROGRAM = 2,
+    TYPE_PTRSPECIFIER = 24,
     TYPE_READPROPERTYDECLARE = 7,
+    TYPE_REFSPECIFIER = 25,
     TYPE_RETURNSTMT = 13,
-    TYPE_STRINGLITERAL = 34,
+    TYPE_STRINGLITERAL = 36,
     TYPE_SWITCHSTMT = 20,
-    TYPE_TERNARYEXPR = 25,
-    TYPE_TYPECAST = 28,
+    TYPE_TERNARYEXPR = 27,
+    TYPE_TYPECAST = 30,
     TYPE_TYPESPECIFIER = 23,
-    TYPE_UNSIGNEDLITERAL = 37,
+    TYPE_UNSIGNEDLITERAL = 39,
     TYPE_VARIABLEDECLARE = 22,
-    TYPE_VARIABLEEXPR = 30,
+    TYPE_VARIABLEEXPR = 32,
     TYPE_WHILESTMT = 18,
     TYPE_WRITEPROPERTYDECLARE = 8,
 };
@@ -415,6 +434,7 @@ public:
 class Merge : public JsonASTBase {
 public:
     Merge(value_t &value) : JsonASTBase(value) { LR_ASSERT(value["id"] == TYPE_MERGE); }
+    value_t &getSymbol() { return value_["symbol"]; }
     value_t &getValue() { return value_["value"]; }
 };
 class NewExpr : public JsonASTBase {
@@ -434,12 +454,22 @@ public:
     Program(value_t &value) : JsonASTBase(value) { LR_ASSERT(value["id"] == TYPE_PROGRAM); }
     value_t &getValue() { return value_["value"]; }
 };
+class PtrSpecifier : public JsonASTBase {
+public:
+    PtrSpecifier(value_t &value) : JsonASTBase(value) { LR_ASSERT(value["id"] == TYPE_PTRSPECIFIER); }
+    value_t &getType() { return value_["type"]; }
+};
 class ReadPropertyDeclare : public JsonASTBase {
 public:
     ReadPropertyDeclare(value_t &value) : JsonASTBase(value) { LR_ASSERT(value["id"] == TYPE_READPROPERTYDECLARE); }
     value_t &getBlock() { return value_["block"]; }
     value_t &getName() { return value_["name"]; }
     bool getPublic() { return value_["public"]; }
+    value_t &getType() { return value_["type"]; }
+};
+class RefSpecifier : public JsonASTBase {
+public:
+    RefSpecifier(value_t &value) : JsonASTBase(value) { LR_ASSERT(value["id"] == TYPE_REFSPECIFIER); }
     value_t &getType() { return value_["type"]; }
 };
 class ReturnStmt : public JsonASTBase {
@@ -476,7 +506,7 @@ class TypeSpecifier : public JsonASTBase {
 public:
     TypeSpecifier(value_t &value) : JsonASTBase(value) { LR_ASSERT(value["id"] == TYPE_TYPESPECIFIER); }
     value_t &getArgs() { return value_["args"]; }
-    value_t &getType() { return value_["type"]; }
+    string_t &getTypeName() { return value_["typeName"].get_ref<string_t &>(); }
 };
 class UnsignedLiteral : public JsonASTBase {
 public:
@@ -584,8 +614,12 @@ struct Visitor {
                 return static_cast<SubTy *>(this)->visitParamDef(value);
             case TYPE_PROGRAM:
                 return static_cast<SubTy *>(this)->visitProgram(value);
+            case TYPE_PTRSPECIFIER:
+                return static_cast<SubTy *>(this)->visitPtrSpecifier(value);
             case TYPE_READPROPERTYDECLARE:
                 return static_cast<SubTy *>(this)->visitReadPropertyDeclare(value);
+            case TYPE_REFSPECIFIER:
+                return static_cast<SubTy *>(this)->visitRefSpecifier(value);
             case TYPE_RETURNSTMT:
                 return static_cast<SubTy *>(this)->visitReturnStmt(value);
             case TYPE_STRINGLITERAL:
@@ -699,7 +733,13 @@ struct Visitor {
     LR_TYPESPEC(RetTy) visitProgram(Program value) {
         return RetTy();
     }
+    LR_TYPESPEC(RetTy) visitPtrSpecifier(PtrSpecifier value) {
+        return RetTy();
+    }
     LR_TYPESPEC(RetTy) visitReadPropertyDeclare(ReadPropertyDeclare value) {
+        return RetTy();
+    }
+    LR_TYPESPEC(RetTy) visitRefSpecifier(RefSpecifier value) {
         return RetTy();
     }
     LR_TYPESPEC(RetTy) visitReturnStmt(ReturnStmt value) {
@@ -1080,30 +1120,22 @@ public:
         return std::get<1>(*frontier.begin())->value;
     }
 
-    void reduce() {
-        for (auto &[state, node] : frontier) {
-            do_reduce(node);
-        }
-        while (!reduce_list.empty()) {
-            ReduceNode node = std::move(reduce_list.top());
-            reduce_list.pop();
-            do_goto(node);
-        }
-    }
     void shift() {
         shift_list.clear();
         for (auto &[state, node] : frontier) {
             int shift_count = 0;
-            for (auto &trans : *state) {
-                if (trans.type == TRANSITION_SHIFT && trans.symbol == lexer_.symbol()) {
-                    NodePtr shift_node = Node::Create(trans.state, node);
+            for (auto *trans = state->find(lexer_.symbol()); trans < state->end(); trans++) {
+                if (trans->symbol != lexer_.symbol()) {
+                    break;
+                }
+                if (trans->type == TRANSITION_SHIFT) {
+                    NodePtr shift_node = Node::Create(trans->state, node);
                     shift_node->symbol = lexer_.symbol();
                     shift_node->lexeme = lexer_.lexeme();
                     shift_node->location = lexer_.location();
                     shift_node->depth = node->depth + 1;
                     shift_list.push_back(shift_node);
                     shift_count++;
-                    break;
                 }
             }
             if (state->error && shift_count == 0 || node->error) {
@@ -1125,6 +1157,16 @@ public:
             }
         }
         lexer_.advance();
+    }
+    void reduce() {
+        for (auto &[state, node] : frontier) {
+            do_reduce(node);
+        }
+        while (!reduce_list.empty()) {
+            ReduceNode node = std::move(reduce_list.top());
+            reduce_list.pop();
+            do_goto(node);
+        }
     }
 
     void do_goto(ReduceNode &node) {
@@ -1164,29 +1206,36 @@ public:
             accepted = true;
             return;
         }
-        for (auto &Goto: *(node.prev->state)) {
-            if (Goto.type == TRANSITION_SHIFT && Goto.symbol == node.trans->reduce_symbol) {
-                if (frontier.count(Goto.state)) {
-                    do_merge(frontier[Goto.state], value);
-                    frontier[Goto.state]->add_prev(node.prev);
-                    frontier[Goto.state]->depth = 0;
+
+        for (auto *trans = node.prev->state->find(node.trans->reduce_symbol); trans < node.prev->state->end(); trans++) {
+            if (trans->symbol != node.trans->reduce_symbol) {
+                break;
+            }
+            if (trans->type == TRANSITION_SHIFT) {
+                if (frontier.count(trans->state)) {
+                    do_merge(frontier[trans->state], value);
+                    frontier[trans->state]->add_prev(node.prev);
+                    frontier[trans->state]->depth = 0;
                 } else {
-                    auto goto_node = Node::Create(Goto.state, node.prev);
-                    goto_node->symbol = node.trans->reduce_symbol;
-                    goto_node->value = std::move(value);
-                    goto_node->lexeme = ParserSymbols[node.trans->reduce_symbol].text;
-                    goto_node->location = loc;
-                    goto_node->depth = node.prev->depth + 1;
-                    do_reduce(goto_node);
-                    frontier.insert(std::pair(goto_node->state, goto_node));
+                    NodePtr shift = Node::Create(trans->state, node.prev);
+                    shift->symbol = node.trans->reduce_symbol;
+                    shift->value = std::move(value);
+                    shift->lexeme = ParserSymbols[node.trans->reduce_symbol].text;
+                    shift->location = loc;
+                    shift->depth = node.prev->depth + 1;
+                    do_reduce(shift);
+                    frontier.insert({shift->state, shift});
                 }
             }
         }
     }
     void do_reduce(NodePtr &node) {
-        for (auto &trans : *(node->state)) {
-            if (trans.type == TRANSITION_REDUCE && trans.symbol == lexer_.symbol()) {
-                enumerate_path(node, &trans);
+        for (auto *trans = node->state->find(lexer_.symbol()); trans < node->state->end(); trans++) {
+            if (trans->symbol != lexer_.symbol()) {
+                break;
+            }
+            if (trans->type == TRANSITION_REDUCE) {
+                enumerate_path(node, trans);
             }
         }
     }
@@ -1207,6 +1256,9 @@ public:
         DFS(start, trans->reduce_length);
     }
     void do_merge(NodePtr node, value_t &value) {
+        if (node->value == value) {
+            return;
+        }
         struct Getter {
             NodePtr node;
             Node inner;

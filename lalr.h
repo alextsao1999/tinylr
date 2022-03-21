@@ -79,7 +79,7 @@ namespace alex {
     };
 
     struct Symbol {
-        int index = 0;
+        int index = 0; // TODO: Add to constructor
         int line = 0;
         int column = 0;
         int precedence = 0;
@@ -231,9 +231,9 @@ namespace alex {
 
     struct GrammarState;
     enum TransitionType {
-        TransitionNone,
-        TransitionShift,
-        TransitionReduce
+        TransitionNone = 0,
+        TransitionShift = 1,
+        TransitionReduce = 2
     };
     enum ConflictType {
         ConflictNone,
@@ -255,7 +255,7 @@ namespace alex {
                 : state(state), symbol(symbol), type(type), reduce_symbol(reduce_symbol), reduce_action(reduce_action), reduce_length(reduce_length), precedence(precedence) {
         }
         inline bool operator<(const GrammarTransition&rhs) const {
-            return symbol < rhs.symbol;
+            return symbol->index < rhs.symbol->index;
         }
     };
     struct GrammarState {
@@ -755,7 +755,7 @@ namespace alex {
         int precedence = 0;
         std::vector<std::unique_ptr<GrammarState>> states;
         LALRGenerator(LALRGrammar &grammar) : grammar(grammar) {
-            grammar.start->follow.insert(grammar.end);
+            get_start()->follow.insert(get_end());
             int delta;
             do {
                 delta = 0;
@@ -763,11 +763,11 @@ namespace alex {
                     delta += symbol->accept(this);
                 }
             } while (delta > 0);
-            generate_start(grammar.start);
+            generate_start(get_start());
         }
         void generate() {
             check_undefine_symbol();
-            check_nonterminal_precedence(grammar.start);
+            check_nonterminal_precedence(get_start());
             int visit_count = 0;
             while (visit_count < states.size()) {
                 states[visit_count]->index = visit_count;
@@ -784,16 +784,16 @@ namespace alex {
         inline std::vector<std::unique_ptr<Symbol>> &get_symbols() { return grammar.symbols; }
         inline std::vector<std::unique_ptr<Action>> &get_actions() { return grammar.actions; }
         inline std::vector<std::unique_ptr<GrammarState>> &get_states() { return states; }
-        inline Nonterminal *get_start() { return grammar.start; }
-        inline Nonterminal *get_end() { return grammar.end; }
-        inline Nonterminal *get_error() { return grammar.error; }
-        inline Symbol *get_whitespace() { return grammar.whitespace; }
+        inline Nonterminal *get_start() const { return grammar.start; }
+        inline Nonterminal *get_end() const { return grammar.end; }
+        inline Nonterminal *get_error() const { return grammar.error; }
+        inline Symbol *get_whitespace() const { return grammar.whitespace; }
     private:
         void check_undefine_symbol() {
             for (auto &symbol : grammar.symbols) {
                 if (symbol->is_nonterminal()) {
                     auto *nonterminal = symbol->nonterminal();
-                    if (nonterminal == grammar.end || nonterminal == grammar.error) {
+                    if (nonterminal == get_end() || nonterminal == get_error()) {
                         continue;
                     }
                     if (nonterminal->productions.size() == 0) {
@@ -913,7 +913,7 @@ namespace alex {
             GrammarState *state = new GrammarState();
             for (auto &production : symbol->productions) {
                 auto[iter, _] = state->items.insert(GrammarItem(production.get(), 0));
-                iter->lookahead_symbols.insert(grammar.end);
+                iter->lookahead_symbols.insert(get_end());
             }
             states.push_back(std::unique_ptr<GrammarState>(state));
             closure(state->items);
@@ -934,7 +934,7 @@ namespace alex {
                     }
                     // add new transition
                     auto iter = state->transitions.insert(GrammarTransition(goto_state, symbol.get()));
-                    if (symbol.get() == grammar.error) {
+                    if (symbol.get() == get_error()) {
                         state->error = &(*iter);
                     }
                 }
@@ -947,7 +947,7 @@ namespace alex {
                     for (auto &lookahead : item.lookahead_symbols) {
                         auto iter = state->transitions.find(GrammarTransition(nullptr, lookahead));
                         if (iter == state->transitions.end()) {
-                            // reduce if there is no transition on lookahead
+                            // reduce if there is no transition on the lookahead symbol
                             state->transitions.insert(GrammarTransition(
                                     nullptr,
                                     lookahead,

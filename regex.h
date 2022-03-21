@@ -229,7 +229,7 @@ namespace alex {
             Transition(State *state, RegexChar begin, RegexChar end) : state(state), begin(begin), end(end) {}
             Transition(RegexChar begin, RegexChar end) : begin(begin), end(end) {}
             bool operator<(const Transition &other) const {
-                return begin < other.begin || (begin == other.begin && end < other.end);
+                return std::tie(begin, end) < std::tie(other.begin, other.end);
             }
         };
         struct State {
